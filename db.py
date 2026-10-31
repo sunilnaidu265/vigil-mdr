@@ -95,10 +95,61 @@ def _review_status(row):
             "review_note": row["note"] or "", "reviewed_at": row["reviewed_at"]}
 
 
-def save_review(incident_id, decision, note, detect_ids):
+def save_review(incident_id, decision, note, detect_ids, reason="", before=None, after=None):
     with connect() as conn:
-        conn.execute("INSERT INTO reviews (incident_id, decision, note, detect_ids) VALUES (%s, %s, %s, %s)",
-                     (incident_id, decision, note, detect_ids))
+        conn.execute("""
+            INSERT INTO reviews (incident_id, decision, note, detect_ids, reason, summary_before, summary_after)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (incident_id, decision, note, detect_ids, reason, before, after))
+
+
+def load_metrics():
+    latest_review = """LEFT JOIN LATERAL (
+        SELECT * FROM reviews x WHERE x.incident_id = {0}.incident_id
+        ORDER BY x.created_at DESC, x.id DESC LIMIT 1) r ON true"""
+    with connect() as conn:
+        return {
+            "per_day": conn.execute("""
+                SELECT to_char(i.start_time, 'YYYY-MM-DD') AS day, COALESCE(a.severity, 'unrated') AS severity,
+                       count(*) AS total
+                FROM incidents i
+                LEFT JOIN LATERAL (SELECT severity FROM analyses x WHERE x.incident_id = i.incident_id
+                                   ORDER BY x.created_at DESC, x.id DESC LIMIT 1) a ON true
+                GROUP BY 1, 2 ORDER BY 1 DESC
+                """).fetchall(),
+            "detect_seconds": conn.execute("""
+                SELECT avg(extract(epoch FROM detected_at)
+                           - (raw->'routing'->>'event_time')::double precision / 1000) AS seconds
+                FROM detections WHERE raw->'routing'->>'event_time' ~ '^[0-9]+$'
+                """).fetchone()["seconds"],
+            "triage_seconds": conn.execute("""
+                SELECT avg(extract(epoch FROM r.first_review - a.first_analysis)) AS seconds
+                FROM (SELECT incident_id, min(created_at) AS first_analysis FROM analyses GROUP BY 1) a
+                JOIN (SELECT incident_id, min(created_at) AS first_review FROM reviews
+                      WHERE decision IN ('approved', 'edited', 'rejected', 'closed') GROUP BY 1) r USING (incident_id)
+                """).fetchone()["seconds"],
+            "decisions": conn.execute(f"""
+                SELECT r.decision, count(*) AS total FROM incidents i {latest_review.format('i')}
+                WHERE r.decision IN ('approved', 'edited', 'rejected') GROUP BY 1
+                """).fetchall(),
+            "reject_reasons": conn.execute(f"""
+                SELECT r.reason, count(*) AS total FROM incidents i {latest_review.format('i')}
+                WHERE r.decision = 'rejected' GROUP BY 1 ORDER BY 2 DESC
+                """).fetchall(),
+            "rules": conn.execute(f"""
+                SELECT d.rule, count(*) AS total,
+                       count(*) FILTER (WHERE r.decision IN ('approved', 'edited', 'rejected')) AS reviewed,
+                       count(*) FILTER (WHERE r.decision = 'rejected' AND r.reason = 'false_positive') AS false_positives
+                FROM detections d {latest_review.format('d')}
+                GROUP BY 1 ORDER BY 2 DESC LIMIT 10
+                """).fetchall(),
+            "techniques": conn.execute("""
+                SELECT unnest(attack) AS technique, count(*) AS total FROM detections
+                GROUP BY 1 ORDER BY 2 DESC, 1
+                """).fetchall(),
+            "times": [row["detected_at"] for row in conn.execute(
+                "SELECT detected_at FROM detections WHERE detected_at IS NOT NULL ORDER BY 1").fetchall()],
+        }
 
 
 def load_incident_detail(incident_id):
@@ -120,9 +171,13 @@ def load_incidents():
     """Return each incident with its latest analysis, highest score first."""
     with connect() as conn:
         rows = conn.execute("""
-            SELECT i.*, a.ai_status, a.verdict, a.confidence, a.summary, a.recommended_actions,
+            SELECT i.*, a.ai_status, a.verdict, a.confidence, a.severity, a.summary, a.recommended_actions,
                    COALESCE((SELECT array_agg(d.detect_id ORDER BY d.detect_id) FROM detections d
                              WHERE d.incident_id = i.incident_id), '{}') AS detect_ids,
+                   (SELECT e.username FROM events e WHERE e.incident_id = i.incident_id AND e.username IS NOT NULL
+                    GROUP BY e.username ORDER BY count(*) DESC, e.username LIMIT 1) AS main_user,
+                   (SELECT x.summary_after FROM reviews x WHERE x.incident_id = i.incident_id
+                    AND x.summary_after IS NOT NULL ORDER BY x.created_at DESC, x.id DESC LIMIT 1) AS edited_summary,
                    r.decision, r.note, r.created_at AS reviewed_at, r.detect_ids AS reviewed_ids
             FROM incidents i
             LEFT JOIN LATERAL (
@@ -139,9 +194,11 @@ def load_incidents():
         **_review_status(r),
         "incident_id": r["incident_id"], "host": r["host"], "score": r["score"],
         "start": r["start_time"].strftime("%Y-%m-%dT%H:%M:%SZ"), "end": r["end_time"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "started_at": r["start_time"], "main_user": r["main_user"] or "",
         "linked_by": r["linked_by"], "context": r["context"], "detect_ids": r["detect_ids"],
         "ai_status": r["ai_status"] or "not analyzed yet",
-        "analysis": {"verdict": r["verdict"], "confidence": r["confidence"], "summary": r["summary"],
+        "analysis": {"verdict": r["verdict"], "confidence": r["confidence"], "severity": r["severity"],
+                     "summary": r["edited_summary"] or r["summary"],
                      "recommended_actions": r["recommended_actions"] or []} if r["verdict"] else {},
     } for r in rows]
 

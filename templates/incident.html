@@ -1,60 +1,95 @@
 {% extends "base.html" %}
 {% block title %}{{ incident.incident_id }} - Vigil MDR{% endblock %}
+{% macro cite(ids) %}{% for id in ids %}{% if id in event_ids %}<a class="cite" href="#event-{{ id }}">{{ id }}</a>{% else %}<span class="cite missing" title="This ID isn't in the evidence">{{ id }} (not found)</span>{% endif %}{% endfor %}{% endmacro %}
 {% block content %}
-<p><a href="/">Back to incidents</a></p>
-<h1>{{ incident.incident_id }}</h1>
-<section class="stats">
-  <div><strong>{{ incident.score }}</strong><span>Score</span></div>
-  <div><strong>{{ incident.host }}</strong><span>Host</span></div>
-  <div><strong>{{ incident.detect_ids|length }}</strong><span>Detections</span></div>
-  <div><strong>{{ incident.analysis.verdict or incident.ai_status }}</strong><span>AI verdict</span></div>
+<p><a href="/">Back to queue</a></p>
+<div class="title-row">
+  <h1>{{ incident.incident_id }}</h1>
+  {% if customer_ready %}<a class="button-link" href="/incidents/{{ incident.incident_id }}/customer" target="_blank">Customer report</a>{% endif %}
+</div>
+<p>{{ incident.host }}{% if incident.main_user %}, {{ incident.main_user }}{% endif %}. {{ incident.start }} to {{ incident.end }} UTC. Grouped by: {{ incident.linked_by|join(", ") or "single detection" }}.</p>
+
+{% if incident.ai_status != "ok" %}
+<p class="alert" role="alert"><strong>AI {{ incident.ai_status }}.</strong> This analysis didn't pass validation, so review the evidence by hand.{% if latest and latest.errors %} {{ latest.errors|join("; ") }}{% endif %}</p>
+{% endif %}
+
+<section class="panel verdict">
+  <p class="note">Written by the local Ollama model. Check it against the evidence below.</p>
+  {% if latest %}
+  <div class="verdict-row">
+    <span class="sev {{ latest.severity or 'unrated' }}">{{ (latest.severity or "unrated")|capitalize }}</span>
+    <strong>{{ latest.verdict or latest.ai_status }}</strong>
+    {% if latest.confidence %}<span>{{ latest.confidence }} confidence</span>{% endif %}
+    <span>Score {{ incident.score }}</span>
+    <span>{{ incident.detect_ids|length }} detections</span>
+  </div>
+  <p class="summary">{{ incident.analysis.summary }}</p>
+  {% else %}
+  <p class="empty">Not analyzed yet.</p>
+  {% endif %}
+  {% if incident.context.attack_techniques %}
+  <div class="chips">{% for t in incident.context.attack_techniques %}<a class="chip" href="{{ t|mitre_url }}" target="_blank" rel="noopener noreferrer">{{ t }}</a>{% endfor %}</div>
+  {% endif %}
 </section>
-<p>{{ incident.start }} to {{ incident.end }} UTC. Grouped by: {{ incident.linked_by|join(", ") or "single detection" }}.</p>
 
 {% include "_review.html" with context %}
 
+{% if chain %}
 <section class="panel">
-  <h2>AI analysis</h2>
-  <p class="note">Written by the local Ollama model. Check it against the evidence below.</p>
-  {% set latest = detail.analyses[0] if detail.analyses else None %}
-  {% if latest %}
-    <p><strong>{{ latest.verdict or latest.ai_status }}</strong>{% if latest.confidence %}, {{ latest.confidence }} confidence{% endif %}{% if latest.severity %}, {{ latest.severity }} severity{% endif %}</p>
-    <p>{{ latest.summary }}</p>
-    {% if latest.attack_chain %}
-    <h3>Attack chain</h3>
-    <ol>{% for step in latest.attack_chain %}<li><strong>{{ step.stage }}:</strong> {{ step.description }} <small>{{ step.event_ids|join(", ") }}</small></li>{% endfor %}</ol>
-    {% endif %}
-    {% if latest.claims %}
-    <h3>Claims</h3>
-    <ul>{% for c in latest.claims %}<li>{{ c.statement }} <small>{{ c.event_ids|join(", ") }}</small></li>{% endfor %}</ul>
-    {% endif %}
-    {% if latest.recommended_actions %}
-    <h3>Recommended actions</h3>
-    <ul>{% for a in latest.recommended_actions %}<li>{{ a }}</li>{% endfor %}</ul>
-    {% endif %}
-    {% if latest.iocs %}
-    <h3>Indicators</h3>
-    <div class="scroll"><table>
-      <thead><tr><th>Type</th><th>Value (masked)</th></tr></thead>
-      <tbody>{% for ioc in latest.iocs %}<tr><td>{{ ioc.type }}</td><td><code>{{ ioc.value }}</code></td></tr>{% endfor %}</tbody>
-    </table></div>
-    {% endif %}
-    {% if latest.evidence_requests %}
-    <h3>Evidence to collect</h3>
-    <ul>{% for item in latest.evidence_requests %}<li>{{ item }}</li>{% endfor %}</ul>
-    {% endif %}
-    {% if latest.playbooks %}<p class="note">Playbooks used: {{ latest.playbooks|join(", ") }}</p>{% endif %}
-  {% else %}
-    <p>Not analyzed yet.</p>
-  {% endif %}
+  <h2>Attack chain</h2>
+  <ol class="chain">
+    {% for step in chain %}
+    <li>
+      <strong>{{ step.stage }}</strong>{% if step.time %} <small>{{ step.time.strftime("%Y-%m-%d %H:%M:%S") }} UTC</small>{% endif %}
+      <p>{{ step.description }}</p>
+      <div>{{ cite(step.event_ids) }}</div>
+    </li>
+    {% endfor %}
+  </ol>
 </section>
+{% endif %}
+
+{% if latest and latest.claims %}
+<section class="panel">
+  <h2>Claims</h2>
+  <p class="note">Select an event ID to jump to its evidence.</p>
+  <ul class="claims">{% for c in latest.claims %}<li>{{ c.statement }}<div>{{ cite(c.event_ids) }}</div></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% if latest and latest.iocs %}
+<section class="panel">
+  <h2>Indicators</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Type</th><th>Value (masked)</th><th>Copy</th></tr></thead>
+    <tbody>{% for ioc in latest.iocs %}<tr><td>{{ ioc.type }}</td><td><code>{{ ioc.value }}</code></td><td><button type="button" class="copy" data-copy="{{ ioc.value }}">Copy</button></td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endif %}
+
+{% if latest and (latest.evidence_requests or latest.recommended_actions) %}
+<section class="panel">
+  {% if latest.evidence_requests %}
+  <h2>Evidence to collect</h2>
+  <ul class="checklist">
+    {% for item in latest.evidence_requests %}
+    <li><label><input type="checkbox" data-check="{{ incident.incident_id }}-{{ loop.index }}"> {{ item }}</label></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if latest.recommended_actions %}
+  <h2 class="spaced">Recommended actions</h2>
+  <ul>{% for a in latest.recommended_actions %}<li>{{ a }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if latest.playbooks %}<p class="note">Playbooks used: {{ latest.playbooks|join(", ") }}</p>{% endif %}
+</section>
+{% endif %}
 
 {% include "_tree.html" %}
 
 <section class="panel">
   <h2>Why this score</h2>
   <ul>{% for reason in incident.context.score_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
-  <p>ATT&amp;CK: {{ incident.context.attack_techniques|join(", ") or "None" }}</p>
   {% if incident.context.known_tools %}<p>Known tools: {{ incident.context.known_tools|join(", ") }}</p>{% endif %}
 </section>
 
@@ -65,8 +100,8 @@
     <thead><tr><th>Time (UTC)</th><th>Event</th><th>Process</th><th>Parent</th><th>User</th><th>Command line</th><th>Target</th></tr></thead>
     <tbody>
     {% for e in detail.events %}
-      <tr>
-        <td>{{ e.event_time.strftime("%Y-%m-%d %H:%M:%S") if e.event_time }}</td>
+      <tr id="event-{{ e.event_id }}">
+        <td class="age">{{ e.event_time.strftime("%Y-%m-%d %H:%M:%S") if e.event_time }}</td>
         <td><code>{{ e.event_id }}</code></td>
         <td><code>{{ e.process or "" }}</code></td>
         <td><code>{{ e.parent or "" }}</code></td>
@@ -86,10 +121,10 @@
     <tbody>
     {% for d in detail.detections %}
       <tr>
-        <td>{{ d.detected_at.strftime("%Y-%m-%d %H:%M:%S") if d.detected_at }}</td>
+        <td class="age">{{ d.detected_at.strftime("%Y-%m-%d %H:%M:%S") if d.detected_at }}</td>
         <td>{{ d.rule }}</td>
         <td>{{ d.level or "" }}</td>
-        <td>{{ d.attack|join(", ") }}</td>
+        <td>{% for t in d.attack %}<a class="chip" href="{{ t|mitre_url }}" target="_blank" rel="noopener noreferrer">{{ t }}</a>{% endfor %}</td>
       </tr>
     {% endfor %}
     </tbody>
@@ -104,9 +139,10 @@
     {% for f in files %}
       <tr><td><code>{{ f.path }}</code></td><td><code>{{ f.hash }}</code></td><td>{{ f.count }}</td></tr>
     {% else %}
-      <tr><td colspan="3">None recorded.</td></tr>
+      <tr><td colspan="3" class="empty">None recorded.</td></tr>
     {% endfor %}
     </tbody>
   </table></div>
 </section>
+<p class="note hint">Keyboard: <kbd>a</kbd> approves the verdict, and <kbd>r</kbd> jumps to the reject reason.</p>
 {% endblock %}

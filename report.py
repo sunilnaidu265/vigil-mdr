@@ -20,7 +20,7 @@ STYLE = """
 --glass:rgba(120,175,255,.17);--ink:#f0f5ff;--muted:#a9bddc}
 *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 html{background:#050f26}
-body{margin:0;min-height:100vh;color:var(--ink);font:15px/1.55 "Segoe UI",Arial,sans-serif;background:
+body{margin:0;min-height:100vh;color:var(--ink);font:14.5px/1.55 "Segoe UI",Arial,sans-serif;background:
 radial-gradient(760px 520px at 8% -8%,rgba(36,112,255,.34),transparent 70%),
 radial-gradient(680px 520px at 100% 6%,rgba(0,200,255,.17),transparent 70%),
 linear-gradient(165deg,#081a3e 0%,#050f26 62%,#040b1d 100%);background-attachment:fixed}
@@ -28,14 +28,14 @@ header{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding
 background:linear-gradient(180deg,rgba(255,255,255,.11),rgba(255,255,255,.03));border-bottom:1px solid var(--edge)}
 header svg{width:44px;height:44px;border-radius:11px;box-shadow:0 0 20px rgba(79,209,255,.5)}
 main{max-width:1100px;margin:0 auto;padding:18px 24px 48px}
-h1{width:fit-content;font-size:30px;margin:12px 0;color:#d4ebff}
+h1{font-size:26px;font-weight:600;margin:12px 0;color:#fff}
 h2{font-size:19px;margin:32px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--edge)}
 h3{font-size:16px;margin:0 0 10px}
 table{width:100%;table-layout:fixed;margin:8px 0 16px;font-size:13px;border-collapse:separate;border-spacing:0;
 overflow:hidden;background:rgba(4,13,34,.5);border:1px solid var(--edge);border-radius:12px}
 th,td{padding:8px 10px;text-align:left;vertical-align:top;overflow-wrap:anywhere;border-bottom:1px solid var(--line)}
 tr:last-child td{border-bottom:0}
-th{color:#cfe0fb;font-size:12px;letter-spacing:.4px;text-transform:uppercase;
+th{color:#cfe0fb;font-size:13px;font-weight:600;
 background:linear-gradient(180deg,rgba(255,255,255,.13),rgba(255,255,255,.04))}
 .label{width:170px;color:#cfe0fb;font-weight:600;background:rgba(255,255,255,.06)}
 code{font:12px Consolas,monospace;color:#d8ecff;white-space:pre-wrap;overflow-wrap:anywhere}

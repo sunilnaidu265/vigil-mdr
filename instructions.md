@@ -100,13 +100,19 @@ In public mode, sign in through the public address, because the login won't work
 
 | To do this | Use |
 |---|---|
-| See open incidents | The Incidents page, which refreshes every 30 seconds |
-| Investigate | Select an incident for its AI analysis, process tree, score reasons, evidence, detections and file hashes |
-| Decide | **Approve** for a real threat, **Reject** for a false alarm, or **Close** |
+| See incidents | The Incidents page lists them by severity, then newest first, and refreshes every 30 seconds |
+| Filter | Status, severity, host and AI verdict |
+| Investigate | Select an incident for its verdict, attack chain, claims, indicators, process tree and evidence |
+| Check the AI | Select an event ID on a claim to jump to that evidence |
+| Decide | **Approve verdict**, **Reject verdict** with a required reason, **Edit the AI summary**, **Start review** or **Close** |
 | Change your mind | **Reopen** |
-| Get a report | **HTML report** or **PDF report** at the top |
+| Track quality | **Dashboard** shows charts of detections, severity, AI verdicts, top rules and techniques, plus timings and review results |
+| Report to a customer | **Customer report** appears after you approve or edit an incident, and leaves out raw events |
+| Get a full report | **HTML report** or **PDF report** at the top |
 
-If new detections join an incident you've reviewed, it reopens and shows "new detections". All decisions are kept in the `reviews` table.
+Keyboard shortcuts: `j` and `k` move through the queue, `Enter` opens an incident, `a` approves, and `r` jumps to the reject reason.
+
+If new detections join an incident you've reviewed, it reopens and shows "new detections". All decisions and summary edits are kept in the `reviews` table as an audit trail.
 
 ## Daily use
 

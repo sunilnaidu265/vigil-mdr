@@ -1,25 +1,63 @@
 <section id="review" class="panel">
   <h2>Your review</h2>
-  <p>Status: <span class="badge {{ incident.status }}">{{ incident.status }}</span>
+  <p>Status: <span class="badge {{ incident.status }}">{{ "new" if incident.status == "open" else incident.status|replace("_", " ") }}</span>
     {% if incident.changed_since_review %}<small>New detections arrived after your last decision.</small>{% endif %}</p>
-  <form hx-post="/incidents/{{ incident.incident_id }}/review" hx-target="#review" hx-swap="outerHTML">
+
+  {% if incident.status in ("open", "in_review") %}
+  <form method="post" action="/incidents/{{ incident.incident_id }}/review">
     <label for="note">Note</label>
-    <textarea id="note" name="note" rows="3" maxlength="1000" placeholder="Why did you decide this?"></textarea>
+    <textarea id="note" name="note" rows="2" maxlength="1000" placeholder="Optional for Approve and Close"></textarea>
     <div class="actions">
-      {% if incident.status == "open" %}
-      <button name="decision" value="approved" class="approve">Approve: real threat</button>
-      <button name="decision" value="rejected" class="reject">Reject: false alarm</button>
+      {% if incident.analysis %}<button id="approve-button" name="decision" value="approved" class="approve">Approve verdict</button>{% endif %}
+      {% if incident.status == "open" %}<button name="decision" value="in_review">Start review</button>{% endif %}
       <button name="decision" value="closed">Close</button>
-      {% else %}
-      <button name="decision" value="reopened">Reopen</button>
-      {% endif %}
     </div>
   </form>
+
+  {% if incident.analysis %}
+  <form class="reject" method="post" action="/incidents/{{ incident.incident_id }}/review">
+    <input type="hidden" name="decision" value="rejected">
+    <label for="reason">Reject verdict: reason required</label>
+    <div class="actions">
+      <select id="reason" name="reason" required>
+        <option value="">Choose a reason</option>
+        {% for value, label in reject_reasons.items() %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select>
+      <input name="note" maxlength="1000" placeholder="Optional note" aria-label="Rejection note">
+      <button class="danger">Reject verdict</button>
+    </div>
+  </form>
+
+  <details class="edit">
+    <summary>Edit the AI summary</summary>
+    <form method="post" action="/incidents/{{ incident.incident_id }}/edit">
+      <label for="summary">Summary</label>
+      <textarea id="summary" name="summary" rows="5" maxlength="4000" required>{{ incident.analysis.summary }}</textarea>
+      <label for="edit-note">Why you changed it</label>
+      <input id="edit-note" name="note" maxlength="1000">
+      <div class="actions"><button class="approve">Save edit</button></div>
+    </form>
+  </details>
+  {% endif %}
+  {% else %}
+  <form method="post" action="/incidents/{{ incident.incident_id }}/review">
+    <div class="actions"><button name="decision" value="reopened">Reopen</button></div>
+  </form>
+  {% endif %}
+
   {% if detail.reviews %}
-  <h3>History</h3>
+  <h3>Audit trail</h3>
   <ul class="history">
     {% for r in detail.reviews %}
-    <li><strong>{{ r.decision }}</strong> {{ r.created_at.strftime("%Y-%m-%d %H:%M") }} UTC{% if r.note %}: {{ r.note }}{% endif %}</li>
+    <li>
+      <strong>{{ r.decision|replace("_", " ") }}</strong> {{ r.created_at.strftime("%Y-%m-%d %H:%M") }} UTC{% if r.reason %} ({{ reject_reasons.get(r.reason, r.reason) }}){% endif %}{% if r.note %}: {{ r.note }}{% endif %}
+      {% if r.summary_after %}
+      <details class="diff"><summary>View the change</summary>
+        <p><small>Before</small><br>{{ r.summary_before }}</p>
+        <p><small>After</small><br>{{ r.summary_after }}</p>
+      </details>
+      {% endif %}
+    </li>
     {% endfor %}
   </ul>
   {% endif %}

@@ -1,20 +1,37 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Incidents</h1>
+<h1>Incident queue</h1>
+{% if not ollama_online %}
+<p class="alert" role="alert"><strong>Ollama offline.</strong> New incidents will wait until it's running again.</p>
+{% endif %}
 <section class="stats">
-  <div><strong>{{ stats.open }}</strong><span>Open</span></div>
-  <div><strong>{{ stats.high }}</strong><span>Open, score 70+</span></div>
-  <div><strong>{{ stats.total }}</strong><span>All incidents</span></div>
+  <div><strong>{{ stats.open }}</strong><span>Need review</span></div>
+  <div><strong>{{ stats.urgent }}</strong><span>Critical or high, unreviewed</span></div>
+  <div><strong>{{ stats.failed }}</strong><span>AI failed, review by hand</span></div>
   <div><strong>{{ stats.detections }}</strong><span>Detections</span></div>
 </section>
 
-<form class="filters" hx-get="/incidents/table" hx-target="#incidents" hx-trigger="change" hx-push-url="false">
+<form class="filters" hx-get="/incidents/table" hx-target="#incidents" hx-trigger="change">
   <label>Status
     <select name="status">
       <option value="">All</option>
-      {% for value in ["open", "approved", "rejected", "closed"] %}
-      <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ value|capitalize }}</option>
+      {% for value, label in [("open", "New"), ("in_review", "In review"), ("approved", "Approved"), ("edited", "Edited"), ("rejected", "Rejected"), ("closed", "Closed")] %}
+      <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
+    </select>
+  </label>
+  <label>Severity
+    <select name="severity">
+      <option value="">All</option>
+      {% for value in ["critical", "high", "medium", "low", "unrated"] %}
+      <option value="{{ value }}" {% if severity == value %}selected{% endif %}>{{ value|capitalize }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Host
+    <select name="host">
+      <option value="">All</option>
+      {% for value in hosts %}<option value="{{ value }}" {% if host == value %}selected{% endif %}>{{ value }}</option>{% endfor %}
     </select>
   </label>
   <label>AI verdict
@@ -30,4 +47,5 @@
 <div id="incidents" hx-get="/incidents/table" hx-trigger="every 30s" hx-include=".filters">
   {% include "_table.html" %}
 </div>
+<p class="note hint">Keyboard: <kbd>j</kbd> and <kbd>k</kbd> move through the queue, and <kbd>Enter</kbd> opens an incident.</p>
 {% endblock %}

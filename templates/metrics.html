@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Vigil MDR{% endblock %}
+{% block content %}
+<h1>Security dashboard</h1>
+<section class="stats">
+  <div><strong>{{ metrics.detect_seconds|duration }}</strong><span>Mean time to detect, event to detection</span></div>
+  <div><strong>{{ metrics.triage_seconds|duration }}</strong><span>Mean time to triage, AI verdict to your decision</span></div>
+  <div><strong>{{ decided.get("approved", 0) }}</strong><span>AI verdicts approved</span></div>
+  <div><strong>{{ decided.get("edited", 0) }}</strong><span>AI summaries edited</span></div>
+  <div><strong>{{ decided.get("rejected", 0) }}</strong><span>AI verdicts rejected</span></div>
+</section>
+{% if decided_total == 0 %}<p class="note on-page">AI accuracy needs reviews. Approve, edit or reject incidents to fill this in.</p>{% endif %}
+
+<section class="panel">
+  <h2>Detections over time</h2>
+  <p class="note">Times are UTC. Hover over or tab to a bar for its count.</p>
+  {{ timeline_chart }}
+  <details class="table-view">
+    <summary>Table view</summary>
+    <div class="scroll"><table>
+      <thead><tr><th>Time (UTC)</th><th>Detections</th></tr></thead>
+      <tbody>{% for label, value in timeline %}{% if value %}<tr><td>{{ label }}</td><td>{{ value }}</td></tr>{% endif %}{% endfor %}</tbody>
+    </table></div>
+  </details>
+</section>
+
+<div class="chart-grid">
+  <section class="panel"><h2>Incidents by severity</h2>{{ severity_chart }}</section>
+  <section class="panel"><h2>AI verdicts</h2>{{ verdict_chart }}</section>
+  <section class="panel"><h2>Top rules by detections</h2>{{ rules_chart }}</section>
+  <section class="panel"><h2>Top ATT&amp;CK techniques</h2>{{ techniques_chart }}</section>
+</div>
+
+<section class="panel">
+  <h2>Activity by day and hour</h2>
+  <p class="note">Hours are UTC. Shows the 7 most recent active days.</p>
+  {{ heatmap_chart }}
+</section>
+
+<section class="panel">
+  <h2>Incidents per day</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Day (UTC)</th>{% for level in ["critical", "high", "medium", "low", "unrated"] %}<th>{{ level|capitalize }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for day, counts in days.items() %}
+      <tr><td>{{ day }}</td>{% for level in ["critical", "high", "medium", "low", "unrated"] %}<td>{{ counts[level] }}</td>{% endfor %}</tr>
+      {% else %}
+      <tr><td colspan="6" class="empty">No incidents yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+<section class="panel">
+  <h2>Rule quality</h2>
+  <p class="note">False positives count detections in incidents you rejected for that reason, so they appear once you've reviewed some.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Rule</th><th>Detections</th><th>Reviewed</th><th>False positives</th></tr></thead>
+    <tbody>
+      {% for r in metrics.rules %}
+      <tr><td>{{ r.rule }}</td><td>{{ r.total }}</td><td>{{ r.reviewed }}</td><td>{{ r.false_positives }}</td></tr>
+      {% else %}
+      <tr><td colspan="4" class="empty">No detections yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+{% if metrics.reject_reasons %}
+<section class="panel">
+  <h2>Why verdicts were rejected</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Reason</th><th>Incidents</th></tr></thead>
+    <tbody>{% for r in metrics.reject_reasons %}<tr><td>{{ reject_reasons.get(r.reason, r.reason) }}</td><td>{{ r.total }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endif %}
+
+<section class="panel">
+  <h2>All ATT&amp;CK techniques detected</h2>
+  <p class="note">Shows what your rules detected. Coverage against techniques you've tested isn't tracked yet.</p>
+  <div class="chips">
+    {% for t in metrics.techniques %}<a class="chip" href="{{ t.technique|mitre_url }}" target="_blank" rel="noopener noreferrer">{{ t.technique }} ({{ t.total }})</a>{% else %}<span class="empty">None yet.</span>{% endfor %}
+  </div>
+</section>
+{% endblock %}

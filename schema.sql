@@ -69,3 +69,9 @@ CREATE TABLE IF NOT EXISTS reviews (
     created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS reviews_incident_idx ON reviews (incident_id, created_at DESC);
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS reason text NOT NULL DEFAULT '';
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS summary_before text;
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS summary_after text;
+ALTER TABLE reviews DROP CONSTRAINT IF EXISTS reviews_decision_check;
+ALTER TABLE reviews ADD CONSTRAINT reviews_decision_check
+    CHECK (decision IN ('in_review', 'approved', 'edited', 'rejected', 'closed', 'reopened'));
