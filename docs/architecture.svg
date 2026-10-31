@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 980" width="1180" height="980" font-family="Arial, sans-serif">
+  <title>How Vigil MDR works</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#52606d"/></marker>
+    <marker id="plan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c0392b"/></marker>
+    <style>
+      .t{font-size:17px;font-weight:bold;fill:#fff;text-anchor:middle}
+      .s{font-size:13px;fill:#fff;text-anchor:middle}
+      .zone{font-size:15px;font-weight:bold;fill:#334e68}
+      .note{font-size:13px;fill:#52606d}
+      .line{stroke:#52606d;stroke-width:2;fill:none;marker-end:url(#arrow)}
+      .planned{stroke:#c0392b;stroke-width:2;stroke-dasharray:7 5;fill:none;marker-end:url(#plan)}
+      .ptext{font-size:13px;font-style:italic;fill:#c0392b}
+    </style>
+  </defs>
+  <rect width="1180" height="980" fill="#ffffff"/>
+  <text x="590" y="36" font-size="24" font-weight="bold" fill="#102a43" text-anchor="middle">How Vigil MDR Works</text>
+  <text x="590" y="60" class="note" text-anchor="middle">Solid boxes run today. Dashed red items are planned.</text>
+
+  <!-- Cloud -->
+  <rect x="30" y="80" width="1120" height="170" rx="10" fill="#f0f4f8" stroke="#bcccdc"/>
+  <text x="50" y="106" class="zone">Sandbox and LimaCharlie cloud</text>
+  <rect x="70" y="125" width="280" height="100" rx="8" fill="#334e68"/>
+  <text x="210" y="160" class="t">1. Endpoint</text><text x="210" y="184" class="s">Windows sandbox</text><text x="210" y="204" class="s">LimaCharlie sensor sends events</text>
+  <rect x="450" y="125" width="280" height="100" rx="8" fill="#2f855a"/>
+  <text x="590" y="160" class="t">3. Detect</text><text x="590" y="184" class="s">Sigma and managed rules</text><text x="590" y="204" class="s">matching events become detections</text>
+  <rect x="830" y="125" width="280" height="100" rx="8" fill="#1f7a8c"/>
+  <text x="970" y="160" class="t">Detection history</text><text x="970" y="184" class="s">LimaCharlie Insight</text><text x="970" y="204" class="s">detections wait here for the laptop</text>
+  <path class="line" d="M350 175H448"/><path class="line" d="M730 175H828"/>
+
+  <!-- Laptop -->
+  <rect x="30" y="275" width="1120" height="470" rx="10" fill="#fffdf5" stroke="#d9c58b"/>
+  <text x="50" y="301" class="zone">Your laptop (runs in the background every 5 minutes)</text>
+
+  <rect x="70" y="320" width="230" height="86" rx="8" fill="#52606d"/>
+  <text x="185" y="353" class="t">Task Scheduler</text><text x="185" y="378" class="s">"Vigil Poller" task</text>
+
+  <rect x="400" y="320" width="330" height="110" rx="8" fill="#1f7a8c"/>
+  <text x="565" y="348" class="t">2. Collect: poll.py</text><text x="565" y="372" class="s">logs in with LC_OID and LC_API_KEY</text><text x="565" y="392" class="s">downloads detections, skips ones it has</text><text x="565" y="412" class="s">hides passwords in command lines</text>
+  <path class="line" d="M300 363H398"/>
+  <path class="line" d="M970 225V335H732"/>
+  <text x="790" y="327" class="note">API, outbound only</text>
+
+  <rect x="830" y="350" width="280" height="80" rx="8" fill="#829ab1"/>
+  <text x="970" y="382" class="t">data/detections/</text><text x="970" y="406" class="s">raw detections, masked</text>
+  <path class="line" d="M730 405H828"/>
+
+  <rect x="400" y="470" width="330" height="110" rx="8" fill="#b7791f"/>
+  <text x="565" y="498" class="t">4. Correlate: correlate.py</text><text x="565" y="522" class="s">groups by shared process, or 5-minute window</text><text x="565" y="542" class="s">scores each incident</text><text x="565" y="562" class="s">holds 10 minutes for related alerts</text>
+  <path class="line" d="M565 430V468"/>
+
+  <rect x="70" y="470" width="230" height="110" rx="8" fill="#52606d"/>
+  <text x="185" y="505" class="t">Context added</text><text x="185" y="529" class="s">rule names, descriptions</text><text x="185" y="549" class="s">ATT&amp;CK, known tools</text>
+  <path class="line" d="M398 525H302"/>
+
+  <rect x="70" y="620" width="230" height="100" rx="8" fill="#c0392b"/>
+  <text x="185" y="652" class="t">5. analyze.py</text><text x="185" y="676" class="s">builds the prompt</text><text x="185" y="696" class="s">validate.py checks the answer</text>
+  <path class="line" d="M185 580V618"/>
+
+  <rect x="400" y="620" width="330" height="100" rx="8" fill="#7b241c"/>
+  <text x="565" y="652" class="t">Ollama: qwen3:4b</text><text x="565" y="676" class="s">runs locally on your laptop</text><text x="565" y="696" class="s">returns verdict, summary and actions as JSON</text>
+  <path class="line" d="M300 655H398"/><path class="line" d="M398 690H302"/>
+  <text x="310" y="645" class="note">prompt</text><text x="310" y="710" class="note">answer</text>
+
+  <rect x="830" y="620" width="280" height="100" rx="8" fill="#829ab1"/>
+  <text x="970" y="652" class="t">data/incidents/</text><text x="970" y="676" class="s">one JSON file per incident</text><text x="970" y="696" class="s">verdict, score, detections</text>
+  <path class="line" d="M185 720V735H970V722"/>
+
+  <!-- Output -->
+  <rect x="30" y="770" width="1120" height="190" rx="10" fill="#f8f4fb" stroke="#d6c3e6"/>
+  <text x="50" y="796" class="zone">Review</text>
+
+  <rect x="830" y="815" width="280" height="110" rx="8" fill="#6c3483"/>
+  <text x="970" y="848" class="t">report.py</text><text x="970" y="872" class="s">run by hand</text><text x="970" y="892" class="s">HTML report in data/reports/</text>
+  <path class="line" d="M1040 720V790H970V813"/>
+
+  <rect x="450" y="815" width="280" height="110" rx="8" fill="#52606d"/>
+  <text x="590" y="848" class="t">Analyst (you)</text><text x="590" y="872" class="s">reads incidents and reports</text><text x="590" y="892" class="s">decides what is real</text>
+  <path class="line" d="M828 870H732"/>
+
+  <rect x="70" y="815" width="280" height="110" rx="8" fill="#ffffff" stroke="#c0392b" stroke-width="2" stroke-dasharray="7 5"/>
+  <text x="210" y="848" font-size="16" font-weight="bold" fill="#c0392b" text-anchor="middle">Planned</text>
+  <text x="210" y="872" class="ptext" text-anchor="middle">6. PostgreSQL case store</text>
+  <text x="210" y="892" class="ptext" text-anchor="middle">7. Web portal: approve, reject, close</text>
+  <path class="planned" d="M448 870H352"/>
+  <text x="210" y="912" class="ptext" text-anchor="middle">Feedback: reviews tune the rules</text>
+  <path class="planned" d="M68 870H12V262H590V227"/>
+</svg>

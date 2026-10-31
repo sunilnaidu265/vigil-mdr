@@ -15,6 +15,35 @@ automatically by `tools/daily-status.ps1`.
 | 6 | Case store | Incidents saved in PostgreSQL | Not started | | |
 | 7 | Portal | FastAPI + HTMX with approve/reject | Not started | | |
 
+## Remaining work
+
+Work through these in order. Data comes only from LimaCharlie, with no sandbox steps.
+
+### Confirm
+- [ ] See one new LimaCharlie detection reach `data/incidents/` by itself.
+- [ ] Find out whether Orborus access to LSASS is normal for that tool.
+
+### Improve results
+- [ ] Tune Stage 4 grouping and scoring for Orborus incidents.
+- [ ] Stop Ollama marking every incident `true_positive` with high confidence.
+- [ ] Correct ATT&CK mistakes in Ollama's summaries.
+- [ ] Build an eval set from labelled LimaCharlie detections.
+- [ ] Measure verdict accuracy, then re-test after each prompt or model change.
+- [ ] Tune noisy detection rules and keep the rules in Git.
+
+### Build the rest of the diagram
+- [ ] Stage 6: create PostgreSQL tables for events, detections, incidents and analyses.
+- [ ] Stage 6: save incidents to PostgreSQL instead of files.
+- [ ] Stage 7: build the FastAPI and HTMX dashboard and incident pages.
+- [ ] Stage 7: add HTML and PDF reports to the portal.
+- [ ] Analyst review: add approve, reject and close.
+- [ ] Feedback loop: use review decisions to tune rules.
+
+### Optional later
+- [ ] Email or desktop alerts for high-score incidents.
+- [ ] A report generated automatically each day.
+- [ ] Linux VMs or Sysmon for wider coverage.
+
 ## Daily log
 
 ### 2026-10-31 15:20
