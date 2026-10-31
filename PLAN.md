@@ -4,7 +4,7 @@ Connect LimaCharlie to Ollama with no manual work.
 
 Created: 2026-10-31
 
-**Progress (2026-10-31):** Steps 1–8 and 10 are done, and Stage 4 correlation is running. Step 9 and a fresh end-to-end sandbox test are still pending. Verdicts are now saved in `data/incidents/`, not `data/results/`.
+**Progress (2026-10-31):** Steps 1–8 and 10 are done, and Stage 4 correlation is running. No sandbox steps from here on: data comes only from LimaCharlie, so ignore Step 9's sandbox test. The live flow gets confirmed on the next detection LimaCharlie reports by itself. Verdicts are now saved in `data/incidents/`, not `data/results/`.
 
 ## The idea
 
