@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vigil MDR Setup Guide</title>
+<style>
+  :root { --ink: #1f2933; --muted: #52606d; --line: #cbd5e1; --head: #0a1f44; --band: #eef3fa; }
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0 auto; max-width: 920px; padding: 0 16px; color: var(--ink); background: #fff; font: 11pt/1.5 "Segoe UI", Arial, sans-serif; }
+  h1 { font-size: 26pt; line-height: 1.2; color: var(--head); margin: 0 0 6px; }
+  h2 { font-size: 16pt; color: var(--head); margin: 26px 0 8px; padding-bottom: 4px; border-bottom: 2px solid var(--line); break-after: avoid; }
+  h3 { font-size: 12pt; color: var(--head); margin: 14px 0 4px; break-after: avoid; }
+  p { margin: 6px 0; }
+  ul, ol { margin: 6px 0; padding-left: 22px; }
+  li { margin: 3px 0; }
+  code { font: 9.5pt Consolas, monospace; background: var(--band); padding: 0 3px; border-radius: 3px; overflow-wrap: anywhere; }
+  pre { font: 9pt/1.4 Consolas, monospace; background: var(--band); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; break-inside: avoid; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 9.5pt; }
+  th, td { border: 1px solid var(--line); padding: 5px 7px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+  th { background: var(--band); }
+  tr { break-inside: avoid; }
+  .lead { font-size: 12pt; color: var(--muted); }
+  .note { background: #fff8e1; border-left: 4px solid #e0a800; padding: 8px 12px; margin: 10px 0; font-size: 10pt; break-inside: avoid; }
+  .done { background: #e8f6ee; border-left: 4px solid #2f855a; padding: 8px 12px; margin: 10px 0; font-size: 10pt; break-inside: avoid; }
+</style>
+</head>
+<body>
+<h1>Vigil MDR Setup Guide</h1>
+<p class="lead">Build Vigil from nothing on a Windows laptop. No earlier knowledge of the project is needed. Allow about half a day.</p>
+
+<h2>What you'll build</h2>
+<p>A Windows test machine sends security events to LimaCharlie. Detection rules there raise alerts. A background job on your laptop downloads those alerts, groups them into incidents, asks a local AI model for an opinion, and saves everything in PostgreSQL. You review incidents in a web portal.</p>
+<div class="note"><strong>Before you start:</strong> Vigil is a learning lab. It doesn't stop attacks, and its AI verdicts can be wrong, so a person must review them. Only run attack simulations on a test machine you own or are allowed to use, never on your laptop or a work machine.</div>
+
+<h2>What you need</h2>
+<table>
+  <tr><th>Item</th><th>Details</th></tr>
+  <tr><td>Windows 10 or 11 laptop</td><td>16 GB of RAM recommended, plus about 10 GB of free disk space</td></tr>
+  <tr><td>Test machine</td><td>A Windows virtual machine, using VirtualBox or similar</td></tr>
+  <tr><td>Accounts</td><td>Free accounts at LimaCharlie and GitHub, with access to the Vigil repo</td></tr>
+  <tr><td>Tools</td><td>Python 3.11 or later, Git, Ollama, PostgreSQL 17 and cloudflared. Step 2 installs them</td></tr>
+</table>
+<p>Run every laptop command in <strong>PowerShell</strong>. Open a new window whenever a step tells you to, because new settings only reach new windows.</p>
+
+<h2>Step 1: Set up LimaCharlie and the test machine</h2>
+<ol>
+  <li>Create a virtual machine, then install Windows on it.</li>
+  <li>Set its network to NAT, and turn off shared folders and the shared clipboard.</li>
+  <li>Take a snapshot named <code>clean-base</code>.</li>
+  <li>Create an organization at <a href="https://app.limacharlie.io">app.limacharlie.io</a>.</li>
+  <li>Create an installation key, then follow LimaCharlie's Windows sensor instructions on the virtual machine.</li>
+  <li>Enable <strong>Insight</strong>, which stores detection history.</li>
+  <li>Add detection rules. Enable the Sigma and managed rule sets LimaCharlie offers under Extensions or Add-ons.</li>
+  <li>Open <strong>Access Management</strong>, then <strong>REST API</strong>, and copy your Organization ID.</li>
+  <li>Create an API key named <code>vigil-poller</code> with only the <code>insight.det.get</code> permission. Copy it somewhere safe, because it may only be shown once.</li>
+</ol>
+<div class="note">Don't use the Org JWT shown on that page. It's a temporary token with wide access. Menu names may differ from these labels.</div>
+<div class="done"><strong>Check:</strong> run <code>whoami /all</code> on the virtual machine, then find it in the sensor's timeline in LimaCharlie.</div>
+
+<h2>Step 2: Install the tools on your laptop</h2>
+<pre><code>winget install --id Python.Python.3.12 --exact
+winget install --id Git.Git --exact
+winget install --id GitHub.cli --exact
+winget install --id Ollama.Ollama --exact
+winget install --id Cloudflare.cloudflared --exact
+winget install --id PostgreSQL.PostgreSQL.17 --exact</code></pre>
+<p>PostgreSQL's installer asks you to choose a password for its <code>postgres</code> admin account. Keep it for Step 5. Close PowerShell and open a new window, then check the tools:</p>
+<pre><code>python --version
+git --version
+ollama --version
+cloudflared --version</code></pre>
+
+<h3>If PostgreSQL won't download</h3>
+<p>If winget reports a 403 error, install PostgreSQL from conda-forge. This needs no admin rights. Change <code>F:\PostgreSQL</code> if you want it elsewhere.</p>
+<pre><code>$root = 'F:\PostgreSQL'
+New-Item -ItemType Directory -Force $root | Out-Null
+curl.exe -L -o "$root\micromamba.exe" 'https://github.com/mamba-org/micromamba-releases/releases/latest/download/micromamba-win-64.exe'
+$env:MAMBA_ROOT_PREFIX = "$root\mamba"
+&amp; "$root\micromamba.exe" create -y -p "$root\env" -c conda-forge --override-channels 'postgresql=17'
+$pwFile = "$env:TEMP\pg-admin.txt"
+$adminPassword = Read-Host 'Choose a postgres admin password'
+[IO.File]::WriteAllText($pwFile, $adminPassword)
+&amp; "$root\env\Library\bin\initdb.exe" -D "$root\data" -U postgres --pwfile=$pwFile -A scram-sha-256 -E UTF8 --locale=C
+Remove-Item -LiteralPath $pwFile
+Add-Content -LiteralPath "$root\data\postgresql.conf" -Value "`nlisten_addresses = 'localhost'`nport = 5432" -Encoding ascii
+&amp; "$root\env\Library\bin\pg_ctl.exe" start -D "$root\data" -l "$root\postgres.log"</code></pre>
+
+<h2>Step 3: Get the code</h2>
+<p>This repo is private, so your GitHub account needs access. Then run:</p>
+<pre><code>gh auth login
+cd $HOME
+git clone https://github.com/sunilnaidu265/vigil-mdr.git
+cd vigil-mdr
+python -m venv .venv
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+New-Item -ItemType Directory -Force data | Out-Null</code></pre>
+<div class="done"><strong>Check:</strong> your prompt starts with <code>(.venv)</code>.</div>
+
+<h2>Step 4: Set up Ollama</h2>
+<pre><code>ollama pull qwen3:4b
+ollama list</code></pre>
+<div class="done"><strong>Check:</strong> <code>qwen3:4b</code> appears in the list.</div>
+
+<h2>Step 5: Create the database</h2>
+<p>Choose the line that matches how you installed PostgreSQL, then run the rest.</p>
+<pre><code># winget install
+$bin = 'C:\Program Files\PostgreSQL\17\bin'
+# conda-forge install
+$bin = 'F:\PostgreSQL\env\Library\bin'
+
+$bytes = New-Object byte[] 24
+[Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+$dbPassword = [BitConverter]::ToString($bytes).Replace('-', '')
+[Environment]::SetEnvironmentVariable('VIGIL_DB_PASSWORD', $dbPassword, 'User')
+$env:VIGIL_DB_PASSWORD = $dbPassword
+$env:PGPASSWORD = Read-Host 'Enter the postgres admin password'
+"CREATE ROLE vigil LOGIN PASSWORD '$dbPassword';`nCREATE DATABASE vigil OWNER vigil;" | &amp; "$bin\psql.exe" -h localhost -U postgres -d postgres -q -v ON_ERROR_STOP=1
+Remove-Item Env:PGPASSWORD
+.\.venv\Scripts\python.exe db.py</code></pre>
+<div class="done"><strong>Check:</strong> the last command prints <code>tables ready</code>.</div>
+
+<h2>Step 6: Save your LimaCharlie details</h2>
+<p>Replace both placeholders with your values. Never put them in code or commit them to Git.</p>
+<pre><code>[Environment]::SetEnvironmentVariable('LC_OID', 'your-org-id', 'User')
+[Environment]::SetEnvironmentVariable('LC_API_KEY', 'your-api-key', 'User')</code></pre>
+<p>Close PowerShell and open a new window. Go back to the project folder, then check:</p>
+<pre><code>cd $HOME\vigil-mdr
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+[bool]$env:LC_OID; [bool]$env:LC_API_KEY; [bool]$env:VIGIL_DB_PASSWORD</code></pre>
+<div class="done"><strong>Check:</strong> all three lines print <code>True</code>.</div>
+
+<h2>Step 7: Create a test detection</h2>
+<p>Run this <strong>on the virtual machine only</strong>. It's a harmless encoded command that prints text.</p>
+<pre><code>powershell.exe -nop -enc VwByAGkAdABlAC0ASABvAHMAdAAgAFYAaQBnAGkAbAAgAHQAZQBzAHQA</code></pre>
+<p>For more realistic data, install Atomic Red Team on the virtual machine, and run a test:</p>
+<pre><code>IEX (IWR 'https://raw.githubusercontent.com/redcanaryco/invoke-atomicredteam/master/install-atomicredteam.ps1' -UseBasicParsing)
+Install-AtomicRedTeam -getAtomics
+Invoke-AtomicTest T1059.001 -ShowDetailsBrief
+Invoke-AtomicTest T1059.001 -TestNumbers 11</code></pre>
+<div class="note">Read what a test does with <code>-ShowDetailsBrief</code> before running it. Test numbers can change. Restore your snapshot when you've finished testing.</div>
+<div class="done"><strong>Check:</strong> your rule's detection appears on LimaCharlie's Detections page.</div>
+
+<h2>Step 8: Run the pipeline once</h2>
+<p>Back on your laptop, run this in the project folder. The first run looks back 3 days and can take several minutes.</p>
+<pre><code>.\.venv\Scripts\python.exe poll.py
+Get-Content data\poll.log -Tail 10</code></pre>
+<div class="done"><strong>Check:</strong> the log shows a line starting <code>fetched</code>, with no <code>run failed</code>. Incidents wait 10 minutes after their last detection, so run it again later if none are analyzed yet.</div>
+
+<h2>Step 9: Run it automatically</h2>
+<p>Run this in the project folder. It starts the job every 5 minutes with no window.</p>
+<pre><code>$dir = (Get-Location).Path
+$action = New-ScheduledTaskAction -Execute "$dir\.venv\Scripts\pythonw.exe" -Argument "`"$dir\poll.py`"" -WorkingDirectory $dir
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+Register-ScheduledTask -TaskName 'Vigil Poller' -Action $action -Trigger $trigger -Settings $settings</code></pre>
+<p>If you used the conda-forge install, also start PostgreSQL at login:</p>
+<pre><code>$cmd = "&amp; 'F:\PostgreSQL\env\Library\bin\pg_ctl.exe' start -D 'F:\PostgreSQL\data' -l 'F:\PostgreSQL\postgres.log'"
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -Command `"$cmd`""
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
+Register-ScheduledTask -TaskName 'Vigil PostgreSQL' -Action $action -Trigger $trigger</code></pre>
+<div class="done"><strong>Check:</strong> after 5 minutes, this shows a recent <code>LastRunTime</code> and a <code>LastTaskResult</code> of <code>0</code>.</div>
+<pre><code>Get-ScheduledTaskInfo -TaskName 'Vigil Poller' | Select-Object LastRunTime, LastTaskResult, NextRunTime</code></pre>
+
+<h2>Step 10: Tell Vigil about your own tools</h2>
+<p>Add any trusted automation or management tools to <code>KNOWN_TOOLS</code> in <code>correlate.py</code>, using the lowercase full path. This lowers their score and tells the AI what they are. Remove the sample Orborus entry if you don't use it.</p>
+<pre><code>KNOWN_TOOLS = {r"c:\program files\yourtool\agent.exe": "Your management agent"}</code></pre>
+
+<h2>Step 11: Start the web portal</h2>
+<p>Choose a portal password of at least 14 characters. Nothing appears while you type it.</p>
+<pre><code>powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\set-portal-password.ps1</code></pre>
+<p>Open a new PowerShell window, then start the portal and leave the window open:</p>
+<pre><code>cd $HOME\vigil-mdr
+.\.venv\Scripts\python.exe portal.py</code></pre>
+<p>Open <a href="http://127.0.0.1:8080">http://127.0.0.1:8080</a> and sign in. From there you can review incidents, view process trees, and open HTML and PDF reports.</p>
+<div class="done"><strong>Check:</strong> your incidents appear. Open one, select <strong>Close</strong>, then <strong>Reopen</strong>, and confirm both appear in its history.</div>
+
+<h2>Step 12: Publish the portal (optional)</h2>
+<div class="note">Publishing puts real hostnames, usernames, IP addresses and command lines behind one password. Skip this step unless you need it, and use a long, unique password. Keep the site private to people allowed to see that data.</div>
+<p>Stop the portal with <code>Ctrl+C</code>, then start it in public mode:</p>
+<pre><code>$env:VIGIL_PUBLIC = '1'
+.\.venv\Scripts\python.exe portal.py</code></pre>
+<p>In a second window, start the tunnel:</p>
+<pre><code>cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8080</code></pre>
+<p>It prints an address ending in <code>trycloudflare.com</code>. Open it, and sign in there, because the login won't work on <code>127.0.0.1</code> in public mode. To take the site offline, press <code>Ctrl+C</code> in the tunnel window.</p>
+<p>Your laptop stays the server, so the site stops if it sleeps or shuts down. The address changes whenever the tunnel restarts. A stable address needs a domain you own and a named Cloudflare tunnel.</p>
+
+<h2>Troubleshooting</h2>
+<table>
+  <tr><th>Problem</th><th>What to do</th></tr>
+  <tr><td>Scripts are disabled</td><td>Run <code>Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass</code></td></tr>
+  <tr><td><code>KeyError</code> for a variable</td><td>Open a new PowerShell window, then repeat the step that sets it</td></tr>
+  <tr><td>401 or 403 from LimaCharlie</td><td>Check the Organization ID, API key and <code>insight.det.get</code> permission</td></tr>
+  <tr><td>Empty detection results</td><td>Check Insight is enabled, and that rules fired in the last 3 days</td></tr>
+  <tr><td>Connection error to port 11434</td><td>Start Ollama</td></tr>
+  <tr><td>Connection error to port 5432</td><td>Start PostgreSQL</td></tr>
+  <tr><td>Wrong portal password</td><td>Run <code>tools\set-portal-password.ps1</code> again, then restart the portal</td></tr>
+  <tr><td>Too many login attempts</td><td>Wait 15 minutes, or restart the portal</td></tr>
+  <tr><td>Incident shows <code>failed</code></td><td>The AI answer failed validation. Vigil keeps the incident for manual review</td></tr>
+  <tr><td>Analysis is very slow</td><td>Close other heavy programs. Each incident can take several minutes</td></tr>
+</table>
+
+<h2>Keep it safe</h2>
+<ul>
+  <li>Never commit <code>data/</code>, <code>.venv/</code>, API keys or passwords.</li>
+  <li>If an API key leaks, delete it in LimaCharlie and create a new one.</li>
+  <li>Check reports before sharing them, because masking only covers common argument names.</li>
+  <li>Keep the test machine isolated, and restore a snapshot after attack tests.</li>
+</ul>
+
+<h2>Where to go next</h2>
+<ul>
+  <li><code>instructions.md</code> covers daily use and settings.</li>
+  <li><code>docs/Vigil-MDR-Implementation.pdf</code> explains the design.</li>
+  <li><code>SPRINT_STATUS.md</code> lists remaining work.</li>
+</ul>
+</body>
+</html>

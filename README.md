@@ -64,7 +64,9 @@ The detailed task list is in [SPRINT_STATUS.md](SPRINT_STATUS.md).
 
 ## Getting started
 
-Setup, daily use, settings and troubleshooting are all in [instructions.md](instructions.md). The full design is in the [implementation guide (PDF)](docs/Vigil-MDR-Implementation.pdf).
+New here? Follow the [step-by-step setup guide (PDF)](docs/Vigil-MDR-Setup-Guide.pdf) to build Vigil from scratch.
+
+Daily use, settings and troubleshooting are in [instructions.md](instructions.md). The full design is in the [implementation guide (PDF)](docs/Vigil-MDR-Implementation.pdf).
 
 ## Data and secrets
 
