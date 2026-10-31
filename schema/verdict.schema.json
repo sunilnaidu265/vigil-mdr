@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "properties": {
+    "verdict":    { "type": "string", "enum": ["true_positive", "benign", "needs_more_info"] },
+    "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+    "summary":    { "type": "string" },
+    "claims": {
+      "type": "array", "maxItems": 3,
+      "items": {
+        "type": "object",
+        "properties": {
+          "statement": { "type": "string" },
+          "event_ids": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+        },
+        "required": ["statement", "event_ids"]
+      }
+    },
+    "recommended_actions": { "type": "array", "maxItems": 3, "items": { "type": "string" } }
+  },
+  "required": ["verdict", "confidence", "summary", "claims", "recommended_actions"]
+}

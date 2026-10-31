@@ -1,0 +1,167 @@
+# Vigil MDR – Automatic Analysis Plan
+
+Connect LimaCharlie to Ollama with no manual work.
+
+Created: 2026-10-31
+
+**Progress (2026-10-31):** Steps 1–8 and 10 are done, and Stage 4 correlation is running. Step 9 and a fresh end-to-end sandbox test are still pending. Verdicts are now saved in `data/incidents/`, not `data/results/`.
+
+## The idea
+
+Every 5 minutes, a background job on your laptop will:
+
+1. Ask LimaCharlie for new detections.
+2. Save each new detection.
+3. Send it to Ollama for analysis.
+4. Save the verdict.
+
+You only read the results.
+
+```text
+Sandbox -> LimaCharlie rules -> LimaCharlie detection history
+        -> background job on laptop -> Ollama -> verdict file
+```
+
+## Already done
+
+- [x] Sandbox VM deployed
+- [x] LimaCharlie sensor installed
+- [x] Atomic Red Team test run
+- [x] Detection rules loaded
+- [x] Ollama installed and running (model: `qwen3:4b`)
+
+## Step 1: Prepare LimaCharlie
+
+1. Log in to LimaCharlie.
+2. Confirm Insight is enabled.
+3. Note your Organization ID.
+4. Create an API key named `vigil-poller` with only the `insight.det.get` permission.
+
+## Step 2: Prepare the folder
+
+Run in PowerShell:
+
+```powershell
+cd "F:\Gitrepo\vigil mdr"
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install requests
+mkdir data
+```
+
+## Step 3: Save your credentials
+
+Run in PowerShell, using your real values:
+
+```powershell
+[Environment]::SetEnvironmentVariable("LC_OID", "your-org-id", "User")
+[Environment]::SetEnvironmentVariable("LC_API_KEY", "your-api-key", "User")
+```
+
+Then close PowerShell, reopen it, go back to the folder, and activate the venv again. Never put the API key in code.
+
+## Step 4: Test the connection
+
+1. Create `fetch_test.py` in `F:\Gitrepo\vigil mdr` with this code:
+
+   ```python
+   import json, os, time, requests
+
+   OID, KEY = os.environ["LC_OID"], os.environ["LC_API_KEY"]
+   jwt = requests.post("https://jwt.limacharlie.io",
+                       data={"oid": OID, "secret": KEY}, timeout=30)
+   jwt.raise_for_status()
+
+   now = int(time.time())
+   r = requests.get(f"https://api.limacharlie.io/v1/insight/{OID}/detections",
+                    headers={"Authorization": f"Bearer {jwt.json()['jwt']}"},
+                    params={"start": now - 3 * 86400, "end": now, "limit": 5},
+                    timeout=30)
+   r.raise_for_status()
+   with open("data/sample.json", "w", encoding="utf-8") as f:
+       json.dump(r.json(), f, indent=2)
+   print("saved data/sample.json")
+   ```
+
+2. Run `python fetch_test.py`.
+3. Open `data/sample.json`.
+
+**Done when:** you can see your Atomic Red Team detections in that file.
+
+If login fails, check the JWT URL first. It still needs confirming.
+
+## Step 5: Map the fields
+
+1. Compare `data/sample.json` with the fields the converter expects.
+2. Write or adjust the converter so hostname, command line, parent process, user, time and ATT&CK technique all come through.
+
+**Done when:** one real detection converts into a complete incident with no blank fields.
+
+## Step 6: Test Ollama on one incident
+
+1. Send that one incident to Ollama.
+2. Check the JSON verdict makes sense.
+
+**Done when:** you get a valid verdict based on real detection data.
+
+## Step 7: Write `poll.py`
+
+`poll.py` must do these things in order:
+
+1. Read the last-checked time from a small state file.
+2. Fetch detections since then, going back a few extra minutes so none are missed.
+3. Skip any `detect_id` that was already processed.
+4. Save each new raw detection to `data/detections/`.
+5. Convert it to an incident.
+6. Send it to Ollama.
+7. Save the verdict to `data/results/`.
+8. Update the last-checked time only if everything succeeded.
+
+If Ollama is down, leave the detection unprocessed so the next run retries it.
+
+**Done when:** running `poll.py` twice in a row creates no duplicate results.
+
+## Step 8: Run it automatically
+
+1. Create a Windows scheduled task that runs `poll.py` every 5 minutes.
+2. Make sure Ollama starts automatically when you log in.
+
+**Done when:** you run a new test on the sandbox, do nothing else, and a verdict file appears within about 5 minutes (a little longer if Ollama is busy).
+
+## Step 9: Test recovery
+
+1. Turn the laptop off, or stop the scheduled task.
+2. Run a test on the sandbox.
+3. Turn the laptop back on, or start the task again.
+
+**Done when:** the missed detection is picked up and analyzed by itself.
+
+## Step 10: Save the code to Git
+
+1. Run `git init`.
+2. Create `.gitignore` containing:
+
+   ```text
+   .venv/
+   data/
+   __pycache__/
+   *.pyc
+   ```
+
+3. Check that `data/` is ignored before your first commit.
+4. Commit the code only.
+
+Detections contain hostnames, usernames and command lines, so keep them out of Git.
+
+## Next after this plan
+
+- **Stage 4:** group related detections into one scored incident.
+- **Stage 6:** move results into PostgreSQL.
+- **Stage 7:** build the portal for review and approve/reject.
+
+## Important notes
+
+- **Delay:** a detection can take about 5 minutes to appear, plus Ollama time.
+- **One at a time:** each detection is analyzed on its own until Stage 4 is built.
+- **Webhook replaced:** this plan replaces the webhook and quick tunnel, because the tunnel URL changes on every restart and needs a public address.
+- **Safety:** only run Atomic Red Team tests inside the sandbox.
