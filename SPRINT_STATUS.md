@@ -13,7 +13,7 @@ automatically by `tools/daily-status.ps1`.
 | 4 | Correlate | Related detections become one scored incident | Working, needs tuning | 2026-10-31 | |
 | 5 | AI Analyze | Local Ollama triage with validated JSON | Running, accuracy not measured | 2026-10-31 | |
 | 6 | Case store | Incidents saved in PostgreSQL | Done | 2026-10-31 | 2026-10-31 |
-| 7 | Portal | FastAPI + HTMX with approve/reject | Not started | | |
+| 7 | Portal | FastAPI + HTMX with approve/reject | Done | 2026-10-31 | 2026-10-31 |
 
 ## Remaining work
 
@@ -24,6 +24,8 @@ Work through these in order. Data comes only from LimaCharlie, with no sandbox s
 - [ ] Find out whether Orborus access to LSASS is normal for that tool.
 
 ### Improve results
+- [ ] Add code rules for known tools touching LSASS, and block contradictory verdicts.
+- [ ] Test a larger Ollama model if the laptop can run it.
 - [ ] Tune Stage 4 grouping and scoring for Orborus incidents.
 - [ ] Stop Ollama marking every incident `true_positive` with high confidence.
 - [ ] Correct ATT&CK mistakes in Ollama's summaries.
@@ -36,9 +38,10 @@ Work through these in order. Data comes only from LimaCharlie, with no sandbox s
 - [x] Stage 6: save incidents to PostgreSQL instead of files.
 - [ ] Stage 6: confirm PostgreSQL starts by itself after a restart.
 - [ ] Stage 6: set up regular database backups.
-- [ ] Stage 7: build the FastAPI and HTMX dashboard and incident pages.
-- [ ] Stage 7: add HTML and PDF reports to the portal.
-- [ ] Analyst review: add approve, reject and close.
+- [x] Stage 7: build the FastAPI and HTMX dashboard and incident pages.
+- [x] Stage 7: add HTML and PDF reports to the portal.
+- [x] Analyst review: add approve, reject and close.
+- [ ] Stage 7: decide whether the portal should start by itself at login.
 - [ ] Feedback loop: use review decisions to tune rules.
 
 ### Optional later

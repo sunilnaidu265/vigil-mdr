@@ -1,0 +1,37 @@
+{% macro render(node) %}
+<li>
+  <div class="proc{% if node.rules %} flagged{% endif %}{% if 'lsass' in node.name|lower %} sensitive{% endif %}">
+    <div class="proc-head">
+      <strong>{{ node.name }}</strong>
+      {% if node.count > 1 %}<span class="count">× {{ node.count }}</span>{% endif %}
+      {% if node.pid and node.count == 1 %}<small>PID {{ node.pid }}</small>{% endif %}
+      {% if node.user %}<small>{{ node.user }}</small>{% endif %}
+      {% if node.time %}<small>{% if node.count > 1 %}first seen {% endif %}{{ node.time }}</small>{% endif %}
+    </div>
+    {% for rule in node.rules %}<span class="rule">{{ rule }}</span>{% endfor %}
+    {% for access in node.accesses %}
+    <p class="access">Accessed <strong>{{ access.target }}</strong>{% if access.flags is not none %} with access flags {{ access.flags }}{% endif %}{% if access.time %} at {{ access.time }}{% endif %}</p>
+    {% endfor %}
+    {% if node.command or node.path %}
+    <details>
+      <summary>Details</summary>
+      {% if node.path %}<p><small>Path</small><br><code>{{ node.path }}</code></p>{% endif %}
+      {% if node.command %}<p><small>Command line</small><br><code>{{ node.command }}</code></p>{% endif %}
+    </details>
+    {% endif %}
+  </div>
+  {% if node.children %}
+  <ul>{% for child in node.children %}{{ render(child) }}{% endfor %}</ul>
+  {% endif %}
+</li>
+{% endmacro %}
+
+<section class="panel">
+  <h2>Process tree</h2>
+  <p class="note">Built from LimaCharlie process links. Red outlines fired a rule. Separate trees mean the link between them wasn't in these detections.</p>
+  {% if tree %}
+  <div class="tree-wrap"><ul class="tree">{% for root in tree %}{{ render(root) }}{% endfor %}</ul></div>
+  {% else %}
+  <p>No process links were found.</p>
+  {% endif %}
+</section>

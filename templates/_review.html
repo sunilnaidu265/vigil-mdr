@@ -1,0 +1,26 @@
+<section id="review" class="panel">
+  <h2>Your review</h2>
+  <p>Status: <span class="badge {{ incident.status }}">{{ incident.status }}</span>
+    {% if incident.changed_since_review %}<small>New detections arrived after your last decision.</small>{% endif %}</p>
+  <form hx-post="/incidents/{{ incident.incident_id }}/review" hx-target="#review" hx-swap="outerHTML">
+    <label for="note">Note</label>
+    <textarea id="note" name="note" rows="3" maxlength="1000" placeholder="Why did you decide this?"></textarea>
+    <div class="actions">
+      {% if incident.status == "open" %}
+      <button name="decision" value="approved" class="approve">Approve: real threat</button>
+      <button name="decision" value="rejected" class="reject">Reject: false alarm</button>
+      <button name="decision" value="closed">Close</button>
+      {% else %}
+      <button name="decision" value="reopened">Reopen</button>
+      {% endif %}
+    </div>
+  </form>
+  {% if detail.reviews %}
+  <h3>History</h3>
+  <ul class="history">
+    {% for r in detail.reviews %}
+    <li><strong>{{ r.decision }}</strong> {{ r.created_at.strftime("%Y-%m-%d %H:%M") }} UTC{% if r.note %}: {{ r.note }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>

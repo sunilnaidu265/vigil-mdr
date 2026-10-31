@@ -1,3 +1,8 @@
 requests
 jsonschema
 psycopg[binary]
+fastapi
+uvicorn
+jinja2
+python-multipart
+itsdangerous

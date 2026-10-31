@@ -15,7 +15,8 @@ It's a learning project, not a production security service. It doesn't block att
 - Sends each incident to a local Ollama model, so detection data stays on the laptop.
 - Validates the model's JSON and rejects evidence IDs it makes up.
 - Stores incidents, detections, events and verdicts in PostgreSQL.
-- Builds an HTML report with indicators, command lines, hashes and a timeline.
+- Builds HTML and PDF reports with indicators, command lines, hashes and a timeline.
+- Provides a local web portal to review incidents, view process trees, and approve, reject or close incidents.
 
 ## Project status
 
@@ -27,8 +28,9 @@ It's a learning project, not a production security service. It doesn't block att
 | 4. Correlate | Working, needs tuning |
 | 5. AI Analyze | Running, accuracy not measured |
 | 6. Case Store | Done |
-| 7. Web Portal | Planned |
-| Analyst review and feedback loop | Planned |
+| 7. Web Portal | Done |
+| Analyst review | Done |
+| Feedback loop | Planned |
 
 The detailed task list is in [SPRINT_STATUS.md](SPRINT_STATUS.md).
 
@@ -38,7 +40,7 @@ The detailed task list is in [SPRINT_STATUS.md](SPRINT_STATUS.md).
 - **Pipeline:** Python and Windows Task Scheduler
 - **AI:** Ollama with the `qwen3:4b` model
 - **Storage:** PostgreSQL 17
-- **Planned:** FastAPI and HTMX
+- **Portal:** FastAPI, Jinja and HTMX
 
 ## Project layout
 
@@ -51,6 +53,9 @@ The detailed task list is in [SPRINT_STATUS.md](SPRINT_STATUS.md).
 | `db.py` | Reads and writes PostgreSQL |
 | `schema.sql` | Database tables |
 | `report.py` | Builds the HTML report |
+| `portal.py` | Runs the web portal |
+| `process_tree.py` | Builds incident process trees |
+| `templates/`, `static/` | Portal pages and styling |
 | `adapters/` | Converts LimaCharlie detections into a simple format |
 | `prompts/` | Instructions for the AI model |
 | `schema/` | Required format for AI verdicts |
@@ -59,8 +64,8 @@ The detailed task list is in [SPRINT_STATUS.md](SPRINT_STATUS.md).
 
 ## Getting started
 
-Setup, daily use, settings and troubleshooting are all in [instructions.md](instructions.md).
+Setup, daily use, settings and troubleshooting are all in [instructions.md](instructions.md). The full design is in the [implementation guide (PDF)](docs/Vigil-MDR-Implementation.pdf).
 
 ## Data and secrets
 
-Detection data stays in `data/`, which Git ignores, and in a local PostgreSQL database that accepts connections from the laptop only. LimaCharlie and database credentials are stored in Windows user environment variables and never in the code.
+Detection data stays in `data/`, which Git ignores, and in a local PostgreSQL database that accepts connections from the laptop only. The portal requires a password, and can be published over HTTPS through a Cloudflare tunnel. LimaCharlie and database credentials are stored in Windows user environment variables and never in the code.

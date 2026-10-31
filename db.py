@@ -10,7 +10,8 @@ BASE = pathlib.Path(__file__).parent
 
 def connect():
     return psycopg.connect(host="localhost", port=5432, dbname="vigil", user="vigil",
-                           password=os.environ["VIGIL_DB_PASSWORD"], row_factory=dict_row)
+                           password=os.environ["VIGIL_DB_PASSWORD"], row_factory=dict_row,
+                           options="-c TimeZone=UTC")  # every time shown is labelled UTC
 
 
 def init_db():
@@ -74,13 +75,45 @@ def save_analysis(record):
     analysis = record.get("analysis") or {}
     with connect() as conn:
         conn.execute("""
-            INSERT INTO analyses (incident_id, detect_ids, model, ai_status, verdict, confidence, summary,
-                                  claims, recommended_actions, errors)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO analyses (incident_id, detect_ids, model, ai_status, verdict, confidence, severity, summary,
+                                  claims, attack_chain, recommended_actions, errors, playbooks,
+                                  iocs, evidence_requests)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (record["incident_id"], record["detect_ids"], record.get("model"), record["ai_status"],
-                  analysis.get("verdict"), analysis.get("confidence"), analysis.get("summary"),
-                  Jsonb(analysis.get("claims", [])), Jsonb(analysis.get("recommended_actions", [])),
-                  Jsonb(record.get("errors", []))))
+                  analysis.get("verdict"), analysis.get("confidence"), analysis.get("severity"), analysis.get("summary"),
+                  Jsonb(analysis.get("claims", [])), Jsonb(analysis.get("attack_chain", [])),
+                  Jsonb(analysis.get("recommended_actions", [])), Jsonb(record.get("errors", [])),
+                  record.get("playbooks", []), Jsonb(analysis.get("iocs", [])),
+                  Jsonb(analysis.get("evidence_requests", []))))
+
+
+def _review_status(row):
+    # new detections mean the last decision no longer covers the whole incident
+    changed = bool(row["decision"]) and row["decision"] != "reopened" and row["reviewed_ids"] != row["detect_ids"]
+    open_now = not row["decision"] or row["decision"] == "reopened" or changed
+    return {"status": "open" if open_now else row["decision"], "changed_since_review": changed,
+            "review_note": row["note"] or "", "reviewed_at": row["reviewed_at"]}
+
+
+def save_review(incident_id, decision, note, detect_ids):
+    with connect() as conn:
+        conn.execute("INSERT INTO reviews (incident_id, decision, note, detect_ids) VALUES (%s, %s, %s, %s)",
+                     (incident_id, decision, note, detect_ids))
+
+
+def load_incident_detail(incident_id):
+    with connect() as conn:
+        return {
+            "events": conn.execute(
+                "SELECT * FROM events WHERE incident_id = %s ORDER BY event_time, event_id", (incident_id,)).fetchall(),
+            "detections": conn.execute(
+                "SELECT detect_id, rule, detected_at, level, priority, attack, raw FROM detections "
+                "WHERE incident_id = %s ORDER BY detected_at", (incident_id,)).fetchall(),
+            "analyses": conn.execute(
+                "SELECT * FROM analyses WHERE incident_id = %s ORDER BY created_at DESC, id DESC", (incident_id,)).fetchall(),
+            "reviews": conn.execute(
+                "SELECT * FROM reviews WHERE incident_id = %s ORDER BY created_at DESC, id DESC", (incident_id,)).fetchall(),
+        }
 
 
 def load_incidents():
@@ -89,15 +122,21 @@ def load_incidents():
         rows = conn.execute("""
             SELECT i.*, a.ai_status, a.verdict, a.confidence, a.summary, a.recommended_actions,
                    COALESCE((SELECT array_agg(d.detect_id ORDER BY d.detect_id) FROM detections d
-                             WHERE d.incident_id = i.incident_id), '{}') AS detect_ids
+                             WHERE d.incident_id = i.incident_id), '{}') AS detect_ids,
+                   r.decision, r.note, r.created_at AS reviewed_at, r.detect_ids AS reviewed_ids
             FROM incidents i
             LEFT JOIN LATERAL (
                 SELECT * FROM analyses x WHERE x.incident_id = i.incident_id
                 ORDER BY x.created_at DESC, x.id DESC LIMIT 1
             ) a ON true
+            LEFT JOIN LATERAL (
+                SELECT * FROM reviews x WHERE x.incident_id = i.incident_id
+                ORDER BY x.created_at DESC, x.id DESC LIMIT 1
+            ) r ON true
             ORDER BY i.score DESC, i.start_time
             """).fetchall()
     return [{
+        **_review_status(r),
         "incident_id": r["incident_id"], "host": r["host"], "score": r["score"],
         "start": r["start_time"].strftime("%Y-%m-%dT%H:%M:%SZ"), "end": r["end_time"].strftime("%Y-%m-%dT%H:%M:%SZ"),
         "linked_by": r["linked_by"], "context": r["context"], "detect_ids": r["detect_ids"],

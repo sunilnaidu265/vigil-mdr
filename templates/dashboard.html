@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Incidents</h1>
+<section class="stats">
+  <div><strong>{{ stats.open }}</strong><span>Open</span></div>
+  <div><strong>{{ stats.high }}</strong><span>Open, score 70+</span></div>
+  <div><strong>{{ stats.total }}</strong><span>All incidents</span></div>
+  <div><strong>{{ stats.detections }}</strong><span>Detections</span></div>
+</section>
+
+<form class="filters" hx-get="/incidents/table" hx-target="#incidents" hx-trigger="change" hx-push-url="false">
+  <label>Status
+    <select name="status">
+      <option value="">All</option>
+      {% for value in ["open", "approved", "rejected", "closed"] %}
+      <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ value|capitalize }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>AI verdict
+    <select name="verdict">
+      <option value="">All</option>
+      {% for value in ["true_positive", "benign", "needs_more_info"] %}
+      <option value="{{ value }}" {% if verdict == value %}selected{% endif %}>{{ value }}</option>
+      {% endfor %}
+    </select>
+  </label>
+</form>
+
+<div id="incidents" hx-get="/incidents/table" hx-trigger="every 30s" hx-include=".filters">
+  {% include "_table.html" %}
+</div>
+{% endblock %}

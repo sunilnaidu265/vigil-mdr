@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vigil MDR Implementation Guide</title>
+<style>
+  :root { --ink: #1f2933; --muted: #52606d; --line: #cbd5e1; --head: #0a1f44; --band: #eef3fa; }
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0 auto; max-width: 920px; padding: 0 16px; color: var(--ink); background: #fff; font: 11pt/1.5 "Segoe UI", Arial, sans-serif; }
+  h1 { font-size: 26pt; line-height: 1.2; color: var(--head); margin: 0 0 6px; }
+  h2 { font-size: 16pt; color: var(--head); margin: 26px 0 8px; padding-bottom: 4px; border-bottom: 2px solid var(--line); break-after: avoid; }
+  h3 { font-size: 12pt; color: var(--head); margin: 16px 0 4px; break-after: avoid; }
+  p { margin: 6px 0; }
+  ul, ol { margin: 6px 0; padding-left: 22px; }
+  li { margin: 2px 0; }
+  code { font: 9.5pt Consolas, monospace; background: var(--band); padding: 0 3px; border-radius: 3px; overflow-wrap: anywhere; }
+  pre { font: 9pt/1.4 Consolas, monospace; background: var(--band); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; break-inside: avoid; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 9.5pt; }
+  th, td { border: 1px solid var(--line); padding: 5px 7px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+  th { background: var(--band); }
+  tr { break-inside: avoid; }
+  img { display: block; max-width: 100%; height: auto; margin: 10px auto; }
+  .lead { font-size: 12pt; color: var(--muted); }
+  .note { background: #fff8e1; border-left: 4px solid #e0a800; padding: 8px 12px; margin: 10px 0; font-size: 10pt; break-inside: avoid; }
+</style>
+</head>
+<body>
+<h1>Vigil MDR Implementation Guide</h1>
+<p class="lead">How the Vigil MDR lab project is built, how it runs, and what remains. Version of 31 October 2026.</p>
+
+<h2>1. Overview</h2>
+<p>Vigil is a personal Managed Detection and Response lab. It collects detections from LimaCharlie, groups related alerts into scored incidents, asks a local AI model for a triage opinion, stores the results in PostgreSQL, and gives an analyst a web portal to review them.</p>
+<p>It's a learning project, not a production security service. It doesn't block attacks, and a person makes the final decision on every incident.</p>
+<div class="note"><strong>Current limitation:</strong> AI verdicts aren't reliable yet and accuracy hasn't been measured. In testing, two nearly identical incidents received opposite verdicts. Section 8 has the details.</div>
+
+<h2>2. Architecture</h2>
+<img src="architecture.svg" alt="Vigil MDR flow from endpoint through LimaCharlie, collection, correlation, AI analysis and PostgreSQL to the web portal and analyst.">
+<table>
+  <tr><th>Stage</th><th>Component</th><th>Status</th></tr>
+  <tr><td>1. Endpoints</td><td>Windows sandbox with the LimaCharlie sensor</td><td>Working</td></tr>
+  <tr><td>2. Collect</td><td><code>poll.py</code>, run every 5 minutes</td><td>Working</td></tr>
+  <tr><td>3. Detect</td><td>LimaCharlie Sigma and managed rules</td><td>Working, needs tuning</td></tr>
+  <tr><td>4. Correlate</td><td><code>correlate.py</code></td><td>Working, needs tuning</td></tr>
+  <tr><td>5. AI Analyze</td><td><code>analyze.py</code>, <code>build_prompt.py</code>, Ollama</td><td>Running, accuracy not measured</td></tr>
+  <tr><td>6. Case Store</td><td>PostgreSQL 17 through <code>db.py</code></td><td>Working</td></tr>
+  <tr><td>7. Web Portal</td><td><code>portal.py</code>, FastAPI, Jinja, HTMX</td><td>Working</td></tr>
+  <tr><td>Analyst review</td><td>Approve, reject, close and reopen</td><td>Working</td></tr>
+  <tr><td>Feedback loop</td><td>Reviews tune detection rules</td><td>Planned</td></tr>
+</table>
+
+<h3>Key design decisions</h3>
+<ul>
+  <li><strong>Polling replaced the webhook.</strong> The laptop makes outbound requests only, and detections missed while it's off are collected from LimaCharlie's history on the next run.</li>
+  <li><strong>The AI runs locally.</strong> Detection data is sent to Ollama on the laptop, not to an external AI service.</li>
+  <li><strong>Code owns the facts.</strong> Grouping, scoring, ATT&amp;CK techniques and timelines come from code. The model only provides an opinion.</li>
+  <li><strong>Evidence is untrusted.</strong> Command lines can be written by an attacker, so they stay separate from trusted context and are escaped on every page.</li>
+</ul>
+
+<h2>3. Project layout</h2>
+<table>
+  <tr><th>Path</th><th>Purpose</th></tr>
+  <tr><td><code>poll.py</code></td><td>Main pipeline: fetch, mask, save, correlate, analyze, store</td></tr>
+  <tr><td><code>adapters/limacharlie.py</code></td><td>Converts a detection into a simple incident shape and masks secrets</td></tr>
+  <tr><td><code>correlate.py</code></td><td>Groups detections and calculates scores</td></tr>
+  <tr><td><code>analyze.py</code></td><td>Calls Ollama, retries once, and defangs the answer</td></tr>
+  <tr><td><code>build_prompt.py</code></td><td>Builds the prompt from core rules and matching playbooks</td></tr>
+  <tr><td><code>validate.py</code></td><td>Checks the schema and rejects invented event IDs</td></tr>
+  <tr><td><code>defang.py</code></td><td>Makes IPs, domains, URLs and emails unclickable</td></tr>
+  <tr><td><code>db.py</code>, <code>schema.sql</code></td><td>PostgreSQL storage and table definitions</td></tr>
+  <tr><td><code>portal.py</code></td><td>Web portal, login and security controls</td></tr>
+  <tr><td><code>process_tree.py</code></td><td>Builds process trees from LimaCharlie process links</td></tr>
+  <tr><td><code>report.py</code></td><td>Builds the HTML and PDF reports</td></tr>
+  <tr><td><code>prompts/</code></td><td><code>core.md</code> and 11 playbooks</td></tr>
+  <tr><td><code>schema/verdict.schema.json</code></td><td>Required format for AI answers</td></tr>
+  <tr><td><code>templates/</code>, <code>static/</code></td><td>Portal pages, styling, logo and HTMX</td></tr>
+  <tr><td><code>tools/</code></td><td>Daily status and portal password scripts</td></tr>
+  <tr><td><code>data/</code></td><td>Local detections, logs and reports, excluded from Git</td></tr>
+</table>
+
+<h2>4. Data flow</h2>
+<ol>
+  <li>The Windows task "Vigil Poller" runs <code>poll.py</code> every 5 minutes. A new run doesn't start while one is active.</li>
+  <li><code>poll.py</code> exchanges <code>LC_OID</code> and <code>LC_API_KEY</code> for a short-lived token, then requests detections since the last check, plus 10 extra minutes. It follows <code>next_cursor</code> through all pages.</li>
+  <li>Passwords and tokens in argument values such as <code>--auth=</code> are replaced with <code>[REDACTED]</code>, then new detections are saved to <code>data/detections/</code>.</li>
+  <li>All saved detections are regrouped into incidents and synced to PostgreSQL.</li>
+  <li>An incident becomes ready 10 minutes after its last detection, so related alerts can join it.</li>
+  <li>Up to 10 incidents per run go to Ollama, highest score first. An incident is analyzed again if its detections change.</li>
+  <li>The verdict is validated, defanged and stored. If Ollama is unreachable, the run stops and a later run retries.</li>
+</ol>
+
+<h2>5. Correlation and scoring</h2>
+<h3>Grouping rules</h3>
+<table>
+  <tr><th>Rule</th><th>Value</th></tr>
+  <tr><td>Scope</td><td>Same host</td></tr>
+  <tr><td>Shared process link</td><td>Up to 30 minutes apart</td></tr>
+  <tr><td>Timing only</td><td>Up to 5 minutes apart, not for known tools</td></tr>
+  <tr><td>Maximum incident span</td><td>1 hour</td></tr>
+  <tr><td>Prompt limits</td><td>12 unique events, command lines cut at 400 characters, 6 rules</td></tr>
+</table>
+<p>Process links use LimaCharlie atoms, which are unique IDs. They're more reliable than process IDs, which Windows reuses.</p>
+<h3>Score</h3>
+<table>
+  <tr><th>Factor</th><th>Effect</th></tr>
+  <tr><td>Base</td><td>Highest rule severity in the incident</td></tr>
+  <tr><td>Several ATT&amp;CK techniques</td><td>+5 per extra technique, up to +15</td></tr>
+  <tr><td>Several rules</td><td>+5 per extra rule, up to +10</td></tr>
+  <tr><td>LSASS targeted</td><td>+20</td></tr>
+  <tr><td>Known tool involved</td><td>-30</td></tr>
+</table>
+<p>Scores stay between 0 and 100. A score measures alert severity, not the likelihood of an attack.</p>
+
+<h2>6. AI analysis</h2>
+<p>The model is <code>qwen3:4b</code>, called through Ollama's local API with temperature 0, an 8192-token context and JSON output forced to match the schema.</p>
+<ol>
+  <li><code>build_prompt.py</code> maps the incident's ATT&amp;CK techniques to playbooks and keeps at most 4 for a normal analysis.</li>
+  <li>Trusted data goes in a <code>&lt;context&gt;</code> block, and events go in <code>&lt;evidence&gt;</code>.</li>
+  <li><code>validate.py</code> checks the schema and every cited event ID in claims and the attack chain.</li>
+  <li>On failure, the errors are sent back for one retry. If it still fails, the incident is marked <code>failed</code>.</li>
+  <li><code>defang.py</code> masks indicators in the answer, even if the model missed them.</li>
+</ol>
+<p>The answer contains a verdict, confidence, severity, summary, attack chain, claims, indicators, evidence requests and recommended actions.</p>
+
+<h2>7. Database</h2>
+<table>
+  <tr><th>Table</th><th>Holds</th></tr>
+  <tr><td><code>incidents</code></td><td>Host, score, time range, grouping method and context</td></tr>
+  <tr><td><code>detections</code></td><td>Masked detections, rule, time, ATT&amp;CK techniques and incident link</td></tr>
+  <tr><td><code>events</code></td><td>Process events used as evidence</td></tr>
+  <tr><td><code>analyses</code></td><td>Every AI verdict, including older versions</td></tr>
+  <tr><td><code>reviews</code></td><td>Analyst decisions. These have no foreign key, so they survive regrouping</td></tr>
+</table>
+<p>PostgreSQL 17 is installed from conda-forge in <code>F:\PostgreSQL</code>, because the official download server refused the connection and drive C: was low on space. It accepts local connections only, and the application uses a dedicated <code>vigil</code> login.</p>
+
+<h2>8. Testing and known limits</h2>
+<h3>Verified</h3>
+<ul>
+  <li>The saved detection count matched LimaCharlie's 7-day history, with none missing.</li>
+  <li>Signed-out visitors can't open portal pages, and forged cookies, invalid hosts and cross-site form posts are refused.</li>
+  <li>Injected script text displays harmlessly in the portal and process tree.</li>
+  <li>Unmasked <code>--auth=</code> values weren't found in saved detections or reports.</li>
+</ul>
+<h3>AI test results</h3>
+<table>
+  <tr><th>Test</th><th>Result</th></tr>
+  <tr><td>First Orborus and LSASS incident</td><td><code>benign</code>, high confidence, with an unsupported claim that LSASS wasn't accessed</td></tr>
+  <tr><td>Second Orborus and LSASS incident</td><td><code>true_positive</code>, critical, with an unsupported claim of credential theft. Rejected for citing an invented event ID</td></tr>
+  <tr><td>Speed</td><td>About 3 to 7 minutes per incident with the full prompts</td></tr>
+</table>
+<h3>Known limits</h3>
+<ul>
+  <li>The model may be too small to apply the full guidance reliably.</li>
+  <li>The laptop is the server, so the site and analysis stop when it's off or asleep.</li>
+  <li>The portal and tunnel don't start by themselves after a restart.</li>
+  <li>The quick tunnel's public address changes on restart and is meant for testing.</li>
+  <li>The portal has a single password and no two-step sign-in.</li>
+  <li>The database has no backups yet.</li>
+  <li>Automatic masking only covers common argument names.</li>
+  <li>Process trees only include processes that appear in detections.</li>
+</ul>
+
+<h2>9. Portal security</h2>
+<table>
+  <tr><th>Control</th><th>Implementation</th></tr>
+  <tr><td>Login</td><td>Every page except login and static files needs a password</td></tr>
+  <tr><td>Password storage</td><td>Salted scrypt hash in a Windows user variable</td></tr>
+  <tr><td>Sessions</td><td>Signed cookie, HttpOnly, SameSite Strict, Secure in public mode, 8-hour limit</td></tr>
+  <tr><td>Guessing</td><td>5 failed attempts blocks an address for 15 minutes</td></tr>
+  <tr><td>Forged requests</td><td>Forms must come from the portal's own origin</td></tr>
+  <tr><td>Hosts</td><td>Only local names and <code>*.trycloudflare.com</code> are accepted</td></tr>
+  <tr><td>Page safety</td><td>Automatic escaping and a Content Security Policy</td></tr>
+  <tr><td>Network</td><td>Portal listens on 127.0.0.1, with public HTTPS through the tunnel</td></tr>
+</table>
+
+<h2>10. Operations</h2>
+<table>
+  <tr><th>Item</th><th>Value</th></tr>
+  <tr><td>Scheduled tasks</td><td>"Vigil Poller", "Vigil PostgreSQL", "Vigil Daily Status"</td></tr>
+  <tr><td>User variables</td><td><code>LC_OID</code>, <code>LC_API_KEY</code>, <code>VIGIL_DB_PASSWORD</code>, <code>VIGIL_PORTAL_HASH</code>, <code>VIGIL_SESSION_SECRET</code></td></tr>
+  <tr><td>Logs</td><td><code>data\poll.log</code>, <code>data\portal.log</code>, <code>F:\PostgreSQL\postgres.log</code></td></tr>
+  <tr><td>Reports</td><td><code>data\reports\</code></td></tr>
+  <tr><td>Setup and daily use</td><td><code>instructions.md</code></td></tr>
+</table>
+<div class="note">Never commit <code>data/</code>, <code>.venv/</code>, API keys or passwords. Reports and detections contain hostnames, usernames, IP addresses and command lines.</div>
+
+<h2>11. Remaining work</h2>
+<ol>
+  <li>Add code rules for known tools touching LSASS, and block contradictory verdicts.</li>
+  <li>Test a larger Ollama model if the laptop can run it.</li>
+  <li>Find out whether Orborus access to LSASS is normal.</li>
+  <li>Build an eval set and measure verdict accuracy.</li>
+  <li>Tune grouping, scoring and noisy detection rules.</li>
+  <li>Set up database backups, and confirm services recover after a restart.</li>
+  <li>Decide how the portal and tunnel should start by themselves.</li>
+  <li>Build the feedback loop from reviews into rule tuning.</li>
+</ol>
+<p>The live checklist is in <code>SPRINT_STATUS.md</code>.</p>
+</body>
+</html>

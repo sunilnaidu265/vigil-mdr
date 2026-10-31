@@ -71,18 +71,17 @@
   <text x="50" y="796" class="zone">Review</text>
 
   <rect x="830" y="815" width="280" height="110" rx="8" fill="#6c3483"/>
-  <text x="970" y="848" class="t">report.py</text><text x="970" y="872" class="s">run by hand</text><text x="970" y="892" class="s">HTML report in data/reports/</text>
+  <text x="970" y="848" class="t">7. Web Portal: portal.py</text><text x="970" y="872" class="s">dashboard and incident pages</text><text x="970" y="892" class="s">HTML and PDF reports</text>
   <path class="line" d="M1040 720V790H970V813"/>
 
   <rect x="450" y="815" width="280" height="110" rx="8" fill="#52606d"/>
-  <text x="590" y="848" class="t">Analyst (you)</text><text x="590" y="872" class="s">reads incidents and reports</text><text x="590" y="892" class="s">decides what is real</text>
+  <text x="590" y="848" class="t">Analyst (you)</text><text x="590" y="872" class="s">reviews incidents in the portal</text><text x="590" y="892" class="s">approve, reject, close, reopen</text>
   <path class="line" d="M828 870H732"/>
 
   <rect x="70" y="815" width="280" height="110" rx="8" fill="#ffffff" stroke="#c0392b" stroke-width="2" stroke-dasharray="7 5"/>
   <text x="210" y="848" font-size="16" font-weight="bold" fill="#c0392b" text-anchor="middle">Planned</text>
-  <text x="210" y="872" class="ptext" text-anchor="middle">7. Web portal: approve, reject, close</text>
-  <text x="210" y="892" class="ptext" text-anchor="middle">HTML and PDF reports in the portal</text>
+  <text x="210" y="880" class="ptext" text-anchor="middle">Feedback loop:</text>
+  <text x="210" y="900" class="ptext" text-anchor="middle">your reviews tune the rules</text>
   <path class="planned" d="M448 870H352"/>
-  <text x="210" y="912" class="ptext" text-anchor="middle">Feedback: reviews tune the rules</text>
   <path class="planned" d="M68 870H12V262H590V227"/>
 </svg>

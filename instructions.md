@@ -67,13 +67,54 @@ It runs only while you're logged in, and Ollama and PostgreSQL must be running.
 
 On this laptop, PostgreSQL 17 is installed in `F:\PostgreSQL`, accepts connections from this machine only, and starts at login through the "Vigil PostgreSQL" scheduled task.
 
+## Web portal
+
+The portal is where you review incidents. Start it in this folder and leave the window open:
+
+```powershell
+.\.venv\Scripts\python.exe portal.py
+```
+
+Then open <http://127.0.0.1:8080> and sign in. Every page except the login page needs your password. Five wrong passwords block that address for 15 minutes.
+
+Set or change the password by running `tools\set-portal-password.ps1`, then restart the portal. Changing it also signs everyone out.
+
+### Publish the portal
+
+The free Cloudflare quick tunnel gives the portal a public HTTPS address. Your laptop stays the server, so the site is only up while the laptop, portal and tunnel are all running. Quick tunnels are meant for testing, and the address changes each time the tunnel restarts.
+
+Start the portal in public mode in one window:
+
+```powershell
+$env:VIGIL_PUBLIC = '1'
+.\.venv\Scripts\python.exe portal.py
+```
+
+Start the tunnel in a second window, and copy the `trycloudflare.com` address it prints:
+
+```powershell
+cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8080
+```
+
+In public mode, sign in through the public address, because the login won't work on `127.0.0.1`. To take the site offline, close the tunnel window.
+
+| To do this | Use |
+|---|---|
+| See open incidents | The Incidents page, which refreshes every 30 seconds |
+| Investigate | Select an incident for its AI analysis, process tree, score reasons, evidence, detections and file hashes |
+| Decide | **Approve** for a real threat, **Reject** for a false alarm, or **Close** |
+| Change your mind | **Reopen** |
+| Get a report | **HTML report** or **PDF report** at the top |
+
+If new detections join an incident you've reviewed, it reopens and shows "new detections". All decisions are kept in the `reviews` table.
+
 ## Daily use
 
-There's nothing to start. Check results whenever you like:
+The background job needs nothing from you. Check results whenever you like:
 
 | To see | Open |
 |---|---|
-| Incidents and verdicts | PostgreSQL `vigil` database, or a generated report |
+| Incidents and verdicts | The web portal |
 | What the job has been doing | `data\poll.log` |
 | Raw detections, with passwords hidden | `data\detections\` |
 
@@ -99,6 +140,7 @@ Remove-Item Env:PGPASSWORD
 | `detections` | Each LimaCharlie detection, masked, linked to its incident |
 | `events` | Process events used as evidence |
 | `analyses` | Ollama's verdicts, including older ones when an incident is re-analyzed |
+| `reviews` | Your approve, reject, close and reopen decisions |
 
 ## Control the job
 

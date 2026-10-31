@@ -52,3 +52,20 @@ CREATE TABLE IF NOT EXISTS analyses (
     created_at          timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS analyses_incident_idx ON analyses (incident_id, created_at DESC);
+
+ALTER TABLE analyses ADD COLUMN IF NOT EXISTS severity text;
+ALTER TABLE analyses ADD COLUMN IF NOT EXISTS attack_chain jsonb NOT NULL DEFAULT '[]';
+ALTER TABLE analyses ADD COLUMN IF NOT EXISTS playbooks text[] NOT NULL DEFAULT '{}';
+ALTER TABLE analyses ADD COLUMN IF NOT EXISTS iocs jsonb NOT NULL DEFAULT '[]';
+ALTER TABLE analyses ADD COLUMN IF NOT EXISTS evidence_requests jsonb NOT NULL DEFAULT '[]';
+
+-- No foreign key: analyst decisions must survive if detections are regrouped.
+CREATE TABLE IF NOT EXISTS reviews (
+    id          bigserial PRIMARY KEY,
+    incident_id text NOT NULL,
+    decision    text NOT NULL CHECK (decision IN ('approved', 'rejected', 'closed', 'reopened')),
+    note        text NOT NULL DEFAULT '',
+    detect_ids  text[] NOT NULL,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS reviews_incident_idx ON reviews (incident_id, created_at DESC);

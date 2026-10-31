@@ -1,0 +1,20 @@
+<div class="scroll">
+<table>
+  <thead><tr><th>Incident</th><th>Score</th><th>Status</th><th>AI verdict</th><th>Host</th><th>Detections</th><th>Started (UTC)</th></tr></thead>
+  <tbody>
+  {% for i in incidents %}
+    <tr>
+      <td><a href="/incidents/{{ i.incident_id }}">{{ i.incident_id }}</a></td>
+      <td><span class="score {% if i.score >= 70 %}high{% elif i.score >= 40 %}medium{% endif %}">{{ i.score }}</span></td>
+      <td><span class="badge {{ i.status }}">{{ i.status }}</span>{% if i.changed_since_review %} <small>new detections</small>{% endif %}</td>
+      <td>{{ i.analysis.verdict or i.ai_status }}{% if i.analysis.confidence %} <small>({{ i.analysis.confidence }})</small>{% endif %}</td>
+      <td>{{ i.host }}</td>
+      <td>{{ i.detect_ids|length }}</td>
+      <td>{{ i.start }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7">No incidents match these filters.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>

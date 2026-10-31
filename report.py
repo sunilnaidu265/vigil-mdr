@@ -12,16 +12,42 @@ REPORT_DIR = BASE / "data" / "reports"
 URL = re.compile(r"https?://[^\s\"'<>)]+", re.IGNORECASE)
 IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 
+LOGO = (BASE / "static" / "logo.svg").read_text(encoding="utf-8")
+
+# matches static/style.css; kept inline so a saved report still works on its own
 STYLE = """
-body{font-family:Arial,sans-serif;color:#1f2933;max-width:1000px;margin:24px auto;padding:0 16px;line-height:1.45}
-h1{font-size:24px} h2{font-size:18px;margin-top:32px;border-bottom:2px solid #d9e2ec;padding-bottom:4px}
-h3{font-size:15px;margin:0 0 8px}
-table{border-collapse:collapse;width:100%;margin:8px 0 16px;font-size:13px;table-layout:fixed}
-th,td{border:1px solid #d9e2ec;padding:6px 8px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
-th{background:#f0f4f8} .label{width:150px;background:#f0f4f8;font-weight:bold}
-code{font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
-.case{border:1px solid #bcccdc;border-radius:6px;padding:12px;margin:14px 0}
-.note{background:#fff8e1;border-left:4px solid #e0a800;padding:8px 12px;font-size:13px}
+:root{color-scheme:dark;--edge:rgba(255,255,255,.15);--bright:rgba(255,255,255,.3);--line:rgba(255,255,255,.1);
+--glass:rgba(120,175,255,.17);--ink:#f0f5ff;--muted:#a9bddc}
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+html{background:#050f26}
+body{margin:0;min-height:100vh;color:var(--ink);font:15px/1.55 "Segoe UI",Arial,sans-serif;background:
+radial-gradient(760px 520px at 8% -8%,rgba(36,112,255,.34),transparent 70%),
+radial-gradient(680px 520px at 100% 6%,rgba(0,200,255,.17),transparent 70%),
+linear-gradient(165deg,#081a3e 0%,#050f26 62%,#040b1d 100%);background-attachment:fixed}
+header{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:10px 24px;font-size:21px;font-weight:700;
+background:linear-gradient(180deg,rgba(255,255,255,.11),rgba(255,255,255,.03));border-bottom:1px solid var(--edge)}
+header svg{width:44px;height:44px;border-radius:11px;box-shadow:0 0 20px rgba(79,209,255,.5)}
+main{max-width:1100px;margin:0 auto;padding:18px 24px 48px}
+h1{width:fit-content;font-size:30px;margin:12px 0;color:#d4ebff}
+h2{font-size:19px;margin:32px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--edge)}
+h3{font-size:16px;margin:0 0 10px}
+table{width:100%;table-layout:fixed;margin:8px 0 16px;font-size:13px;border-collapse:separate;border-spacing:0;
+overflow:hidden;background:rgba(4,13,34,.5);border:1px solid var(--edge);border-radius:12px}
+th,td{padding:8px 10px;text-align:left;vertical-align:top;overflow-wrap:anywhere;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th{color:#cfe0fb;font-size:12px;letter-spacing:.4px;text-transform:uppercase;
+background:linear-gradient(180deg,rgba(255,255,255,.13),rgba(255,255,255,.04))}
+.label{width:170px;color:#cfe0fb;font-weight:600;background:rgba(255,255,255,.06)}
+code{font:12px Consolas,monospace;color:#d8ecff;white-space:pre-wrap;overflow-wrap:anywhere}
+.case{margin:16px 0;padding:18px;background:linear-gradient(150deg,var(--glass),rgba(255,255,255,.035));
+border:1px solid var(--edge);border-radius:16px;box-shadow:0 14px 34px rgba(0,0,0,.38),inset 0 1px 0 var(--bright)}
+.note{padding:10px 14px;font-size:13px;color:#ffe6ac;background:rgba(255,203,107,.1);
+border:1px solid rgba(255,203,107,.35);border-radius:12px}
+@media print{html,body{background:#071631}body{background-attachment:scroll}
+header{background:#0d2452}header svg{box-shadow:none}
+.case{background:#10294f;box-shadow:none;break-inside:auto}
+table{overflow:visible;background:#0b1c3f}tr{break-inside:avoid}th{background:#183268}
+.label{background:#142c5a}.note{background:#2a2a24}}
 """
 
 
@@ -175,7 +201,8 @@ def build(cases, incidents):
         *[case_html(i, case) for i, case in enumerate(cases, 1)],
     ]
     return (f"<!doctype html><html><head><meta charset='utf-8'><title>Vigil MDR Report</title>"
-            f"<style>{STYLE}</style></head><body>{''.join(parts)}</body></html>")
+            f"<style>{STYLE}</style></head><body><header>{LOGO}<span>Vigil MDR</span></header>"
+            f"<main>{''.join(parts)}</main></body></html>")
 
 
 if __name__ == "__main__":
