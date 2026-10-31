@@ -1,0 +1,42 @@
+To: postbox73187@gmail.com
+Subject: Vigil MDR status - 31 Oct 2026: automation running, about 40-45% complete
+
+Hi,
+
+Vigil now runs by itself from detection through to Ollama analysis, but the AI verdicts aren't useful yet. Overall it's about 40-45% complete (a rough estimate).
+
+Working now
+- A Windows sandbox with the LimaCharlie sensor is sending data.
+- Sigma and managed detection rules are firing.
+- A scheduled task checks LimaCharlie every 5 minutes.
+- New detections are saved with passwords hidden and sent to Ollama.
+- Verdicts are saved to data\results.
+
+Problems
+- All 21 verdicts so far are "needs_more_info", even for the Atomic Red Team tests.
+- Likely cause: Ollama sees only process events, not the rule name, description or ATT&CK techniques.
+- Rules need tuning, because the Orborus agent is creating noise.
+
+Progress by stage (rough estimate)
+1. Endpoints: about 100%
+2. Collect: about 90%
+3. Detect: about 70%
+4. Correlate: 0%
+5. AI Analyze: about 50%
+6. Case Store: 0%
+7. Web Portal: 0%
+Analyst review: about 10%
+Feedback loop: 0%
+
+Next steps
+1. Give Ollama more context and measure accuracy with an eval set.
+2. Build correlation so one attack becomes one incident.
+3. Store incidents in PostgreSQL.
+4. Build the web portal with approve and reject.
+5. Feed review decisions back into rule tuning.
+
+Also to do
+- Run git init and make a first commit, because the code isn't in Git yet.
+
+Regards,
+Vigil MDR project
