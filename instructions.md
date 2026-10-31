@@ -79,6 +79,10 @@ Then open <http://127.0.0.1:8080> and sign in. Every page except the login page 
 
 Set or change the password by running `tools\set-portal-password.ps1`, then restart the portal. Changing it also signs everyone out.
 
+### Turn the public site on and off
+
+Double-click `tools\site-on.cmd` to go online. It prints a new public address each time. Double-click `tools\site-off.cmd` when you finish. The background detection job keeps running either way.
+
 ### Publish the portal
 
 The free Cloudflare quick tunnel gives the portal a public HTTPS address. Your laptop stays the server, so the site is only up while the laptop, portal and tunnel are all running. Quick tunnels are meant for testing, and the address changes each time the tunnel restarts.

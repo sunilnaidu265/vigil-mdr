@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Turn On the Vigil Site</title>
+<style>
+  :root { --ink: #1f2933; --muted: #52606d; --line: #cbd5e1; --head: #0a1f44; --band: #eef3fa; }
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0 auto; max-width: 820px; padding: 0 16px; color: var(--ink); background: #fff; font: 11.5pt/1.55 "Segoe UI", Arial, sans-serif; }
+  h1 { font-size: 26pt; line-height: 1.2; color: var(--head); margin: 0 0 6px; }
+  h2 { font-size: 15pt; color: var(--head); margin: 22px 0 8px; padding-bottom: 4px; border-bottom: 2px solid var(--line); break-after: avoid; }
+  p { margin: 6px 0; }
+  ol, ul { margin: 6px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font: 10pt Consolas, monospace; background: var(--band); padding: 0 3px; border-radius: 3px; overflow-wrap: anywhere; }
+  pre { font: 9.5pt/1.4 Consolas, monospace; background: var(--band); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; break-inside: avoid; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10pt; }
+  th, td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: var(--band); }
+  tr { break-inside: avoid; }
+  .lead { color: var(--muted); font-size: 12pt; }
+  .note { background: #fff8e1; border-left: 4px solid #e0a800; padding: 8px 12px; margin: 10px 0; font-size: 10.5pt; break-inside: avoid; }
+</style>
+</head>
+<body>
+<h1>Turn On the Vigil Site</h1>
+<p class="lead">How to put the Vigil portal online when you need it, and take it offline afterwards.</p>
+
+<h2>Turn it on</h2>
+<ol>
+  <li>Make sure your laptop is on, connected to the internet, and logged in.</li>
+  <li>Open this folder: <code>F:\Gitrepo\vigil mdr\tools</code></li>
+  <li>Double-click <code>site-on.cmd</code>.</li>
+  <li>Wait for up to a minute until the black window shows <code>Vigil is ONLINE</code>, followed by an address ending in <code>trycloudflare.com</code>.</li>
+  <li>Copy that address into your browser.</li>
+  <li>Sign in with your portal password.</li>
+  <li>Press any key to close the black window. The site stays online.</li>
+</ol>
+<div class="note">The address changes every time you turn the site on, so always copy the new one.</div>
+
+<h2>Turn it off</h2>
+<ol>
+  <li>Open <code>F:\Gitrepo\vigil mdr\tools</code>.</li>
+  <li>Double-click <code>site-off.cmd</code>.</li>
+  <li>When it shows <code>Vigil is OFFLINE</code>, press any key.</li>
+</ol>
+<p>Turn the site off when you finish, because it holds real hostnames, usernames, IP addresses and command lines.</p>
+
+<h2>What keeps running</h2>
+<p>The background job keeps collecting and analyzing detections while the site is off, as long as you're logged in. New incidents will be waiting when you turn the site back on.</p>
+
+<h2>If it doesn't work</h2>
+<table>
+  <tr><th>Problem</th><th>What to do</th></tr>
+  <tr><td><code>The tunnel did not start</code></td><td>Check your internet connection, then double-click <code>site-on.cmd</code> again</td></tr>
+  <tr><td>The address shows an error</td><td>Wait 30 seconds and refresh. If it continues, run <code>site-off.cmd</code>, then <code>site-on.cmd</code></td></tr>
+  <tr><td>Wrong password</td><td>Check Caps Lock, or set a new password using the steps below</td></tr>
+  <tr><td>Too many attempts</td><td>Wait 15 minutes, or run <code>site-off.cmd</code>, then <code>site-on.cmd</code></td></tr>
+  <tr><td>Database offline</td><td>Log out and back in to Windows, or run <code>Start-ScheduledTask -TaskName 'Vigil PostgreSQL'</code></td></tr>
+  <tr><td>Ollama offline</td><td>Start Ollama. New incidents wait until it's running</td></tr>
+</table>
+
+<h2>Forgot your password?</h2>
+<p>Your password can't be recovered, but you can set a new one. Open PowerShell and run:</p>
+<pre><code>cd "F:\Gitrepo\vigil mdr"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\set-portal-password.ps1</code></pre>
+<p>Type a new password of at least 14 characters, twice. Nothing appears while you type. Then close that window, and double-click <code>site-off.cmd</code> followed by <code>site-on.cmd</code>.</p>
+
+<h2>Keep it safe</h2>
+<ul>
+  <li>Don't share your password or the live address with people who shouldn't see your data.</li>
+  <li>Turn the site off when you aren't using it.</li>
+  <li>Your laptop is the server, so the site stops if it sleeps or shuts down.</li>
+</ul>
+</body>
+</html>
