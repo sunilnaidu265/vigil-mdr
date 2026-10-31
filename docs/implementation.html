@@ -34,6 +34,7 @@
 <p>Vigil is a personal Managed Detection and Response lab. It collects detections from LimaCharlie, groups related alerts into scored incidents, asks a local AI model for a triage opinion, stores the results in PostgreSQL, and gives an analyst a web portal to review them.</p>
 <p>It's a learning project, not a production security service. It doesn't block attacks, and a person makes the final decision on every incident.</p>
 <div class="note"><strong>Current limitation:</strong> AI verdicts aren't reliable yet and accuracy hasn't been measured. In testing, two nearly identical incidents received opposite verdicts. Section 8 has the details.</div>
+<p><strong>New to this project?</strong> Sections 2 to 11 explain the design. Section 12 walks through every build step in order, with the commands, what they do, and how to check them. Section 13 explains the technical terms.</p>
 
 <h2>2. Architecture</h2>
 <img src="architecture.svg" alt="Vigil MDR flow from endpoint through LimaCharlie, collection, correlation, AI analysis and PostgreSQL to the web portal and analyst.">
@@ -72,9 +73,10 @@
   <tr><td><code>portal.py</code></td><td>Web portal, login and security controls</td></tr>
   <tr><td><code>process_tree.py</code></td><td>Builds process trees from LimaCharlie process links</td></tr>
   <tr><td><code>report.py</code></td><td>Builds the HTML and PDF reports</td></tr>
+  <tr><td><code>charts.py</code></td><td>Draws the dashboard charts on the server</td></tr>
   <tr><td><code>prompts/</code></td><td><code>core.md</code> and 11 playbooks</td></tr>
   <tr><td><code>schema/verdict.schema.json</code></td><td>Required format for AI answers</td></tr>
-  <tr><td><code>templates/</code>, <code>static/</code></td><td>Portal pages, styling, logo and HTMX</td></tr>
+  <tr><td><code>templates/</code>, <code>static/</code></td><td>Portal pages, styling, font, logo, HTMX and <code>app.js</code></td></tr>
   <tr><td><code>tools/</code></td><td>Daily status and portal password scripts</td></tr>
   <tr><td><code>data/</code></td><td>Local detections, logs and reports, excluded from Git</td></tr>
 </table>
@@ -130,7 +132,7 @@
   <tr><td><code>detections</code></td><td>Masked detections, rule, time, ATT&amp;CK techniques and incident link</td></tr>
   <tr><td><code>events</code></td><td>Process events used as evidence</td></tr>
   <tr><td><code>analyses</code></td><td>Every AI verdict, including older versions</td></tr>
-  <tr><td><code>reviews</code></td><td>Analyst decisions. These have no foreign key, so they survive regrouping</td></tr>
+  <tr><td><code>reviews</code></td><td>Analyst decisions, reject reasons and summary edits. These have no foreign key, so they survive regrouping</td></tr>
 </table>
 <p>PostgreSQL 17 is installed from conda-forge in <code>F:\PostgreSQL</code>, because the official download server refused the connection and drive C: was low on space. It accepts local connections only, and the application uses a dedicated <code>vigil</code> login.</p>
 
@@ -145,9 +147,10 @@
 <h3>AI test results</h3>
 <table>
   <tr><th>Test</th><th>Result</th></tr>
-  <tr><td>First Orborus and LSASS incident</td><td><code>benign</code>, high confidence, with an unsupported claim that LSASS wasn't accessed</td></tr>
-  <tr><td>Second Orborus and LSASS incident</td><td><code>true_positive</code>, critical, with an unsupported claim of credential theft. Rejected for citing an invented event ID</td></tr>
-  <tr><td>Speed</td><td>About 3 to 7 minutes per incident with the full prompts</td></tr>
+  <tr><td>First Orborus and LSASS incident</td><td><code>benign</code>, high confidence, calling LSASS access normal without proof</td></tr>
+  <tr><td>Second Orborus and LSASS incident</td><td><code>true_positive</code>, critical, with an unsupported claim of credential theft</td></tr>
+  <tr><td>Atomic Red Team session</td><td><code>true_positive</code>, critical, marked failed for citing an invented event ID, with unsupported claims of lateral movement and data theft</td></tr>
+  <tr><td>Speed</td><td>About 3 to 7 minutes per typical incident with the full prompts, and 14 minutes for the largest</td></tr>
 </table>
 <h3>Known limits</h3>
 <ul>
@@ -177,7 +180,7 @@
 <h2>10. Operations</h2>
 <table>
   <tr><th>Item</th><th>Value</th></tr>
-  <tr><td>Scheduled tasks</td><td>"Vigil Poller", "Vigil PostgreSQL", "Vigil Daily Status"</td></tr>
+  <tr><td>Scheduled tasks</td><td>"Vigil Poller", "Vigil PostgreSQL", "Vigil Daily Status". The portal and tunnel are started by hand</td></tr>
   <tr><td>User variables</td><td><code>LC_OID</code>, <code>LC_API_KEY</code>, <code>VIGIL_DB_PASSWORD</code>, <code>VIGIL_PORTAL_HASH</code>, <code>VIGIL_SESSION_SECRET</code></td></tr>
   <tr><td>Logs</td><td><code>data\poll.log</code>, <code>data\portal.log</code>, <code>F:\PostgreSQL\postgres.log</code></td></tr>
   <tr><td>Reports</td><td><code>data\reports\</code></td></tr>
@@ -197,5 +200,215 @@
   <li>Build the feedback loop from reviews into rule tuning.</li>
 </ol>
 <p>The live checklist is in <code>SPRINT_STATUS.md</code>.</p>
+
+<h2>12. Step-by-step build walkthrough</h2>
+<p>This section follows the order the project was built in. Each step says what it's for, the commands used, and how to confirm it worked.</p>
+<div class="note"><strong>Before you copy commands:</strong> run them in PowerShell on Windows, unless a step says otherwise. Replace placeholders such as <code>your-api-key</code>. This project was built in <code>F:\Gitrepo\vigil mdr</code>, so change that path if yours differs. For a fresh install, <code>docs/Vigil-MDR-Setup-Guide.pdf</code> is shorter. Run the sandbox commands only on an isolated test machine.</div>
+
+<h3>Step 1: Create the test machine and connect LimaCharlie</h3>
+<p><strong>Why:</strong> Vigil needs a safe machine to watch. LimaCharlie's sensor sends that machine's activity to the cloud.</p>
+<ol>
+  <li>Create a Windows virtual machine with NAT networking, and turn off shared folders and clipboard.</li>
+  <li>Take a snapshot, so you can undo any test.</li>
+  <li>Create a LimaCharlie organization and installation key, then install the sensor on the virtual machine.</li>
+</ol>
+<p>Run this on the virtual machine, then find it in the sensor's timeline:</p>
+<pre><code>whoami /all</code></pre>
+<p><strong>Check:</strong> you can see the command and its parent process in LimaCharlie.</p>
+
+<h3>Step 2: Create detections</h3>
+<p><strong>Why:</strong> a sensor only records events. Rules decide which events become alerts, called detections.</p>
+<p>Enable Insight for detection history, and enable Sigma and managed rule sets. Then run this harmless encoded test on the virtual machine:</p>
+<pre><code>powershell.exe -nop -enc VwByAGkAdABlAC0ASABvAHMAdAAgAFYAaQBnAGkAbAAgAHQAZQBzAHQA</code></pre>
+<p><strong>Check:</strong> the detection appears on LimaCharlie's Detections page.</p>
+
+<h3>Step 3: Create the project folder and Python workspace</h3>
+<p><strong>Why:</strong> a virtual environment keeps this project's Python packages separate from the rest of your laptop.</p>
+<pre><code>cd "F:\Gitrepo\vigil mdr"
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install requests
+mkdir data</code></pre>
+<p><strong>What these do:</strong> go to the folder, create the workspace, turn it on, install a web request tool, and create a data folder.</p>
+<p><strong>Check:</strong> your prompt starts with <code>(.venv)</code>.</p>
+
+<h3>Step 4: Connect to LimaCharlie safely</h3>
+<p><strong>Why:</strong> the laptop needs permission to read detections. In LimaCharlie, create an API key named <code>vigil-poller</code> with only the <code>insight.det.get</code> permission. Never use the temporary Org JWT, which has far wider access.</p>
+<pre><code>[Environment]::SetEnvironmentVariable("LC_OID", "your-org-id", "User")
+[Environment]::SetEnvironmentVariable("LC_API_KEY", "your-api-key", "User")</code></pre>
+<p>These save the values as Windows user variables, so they never appear in code. Open a new PowerShell window, then check them. This shows only whether each value exists:</p>
+<pre><code>[bool]$env:LC_OID; [bool]$env:LC_API_KEY</code></pre>
+<p><strong>Check:</strong> both lines print <code>True</code>.</p>
+
+<h3>Step 5: Download detections for the first time</h3>
+<p><strong>Why:</strong> this proves the API key works before anything is built on it. <code>fetch_test.py</code> logs in, requests 3 days of detections, and saves 5 of them to <code>data\sample.json</code>.</p>
+<pre><code>cd "F:\Gitrepo\vigil mdr"
+.\.venv\Scripts\Activate.ps1
+python fetch_test.py</code></pre>
+<p><strong>Check:</strong> it prints <code>saved data/sample.json</code>, and the file contains your detections.</p>
+
+<h3>Step 6: Convert detections into a simple format</h3>
+<p><strong>Why:</strong> raw detections contain far more than the AI needs. The adapter in <code>adapters/limacharlie.py</code> keeps the host, user, time, process, parent and command line.</p>
+<pre><code>python convert_test.py</code></pre>
+<p><strong>Problems found and fixed:</strong></p>
+<ul>
+  <li>ATT&amp;CK techniques were empty, because they're stored in <code>detect_mtd.tags</code> and <code>rule_tags</code>.</li>
+  <li>LSASS detections were blank, because their details sit inside an <code>EVENTS</code> list.</li>
+  <li>A command line exposed an agent password, so a masking step now replaces secrets with <code>[REDACTED]</code>. Any exposed password must also be changed.</li>
+</ul>
+<p><strong>Check:</strong> converted detections show real values, not <code>unknown-host</code> or a 1970 date. Delete <code>data\sample.json</code> afterwards if it holds a real secret.</p>
+
+<h3>Step 7: Test the AI on one detection</h3>
+<p><strong>Why:</strong> this confirms Ollama can read a real detection and return structured JSON. Install Ollama, then download the model:</p>
+<pre><code>ollama pull qwen3:4b
+ollama list
+pip install jsonschema
+python step6_test.py</code></pre>
+<p><strong>What these do:</strong> download the model, confirm it's installed, add the JSON checker, and send one LSASS detection to Ollama.</p>
+<p><strong>Check:</strong> the output shows <code>"ai_status": "ok"</code> and a verdict.</p>
+
+<h3>Step 8: Create the automatic job</h3>
+<p><strong>Why:</strong> <code>poll.py</code> joins the pieces together so nobody has to run them by hand. Run it once first:</p>
+<pre><code>python poll.py
+Get-Content data\poll.log -Tail 10</code></pre>
+<p><strong>Check:</strong> the log shows a <code>fetched</code> line and no <code>run failed</code>. Then schedule it to run every 5 minutes with no window:</p>
+<pre><code>$dir = (Get-Location).Path
+$action = New-ScheduledTaskAction -Execute "$dir\.venv\Scripts\pythonw.exe" -Argument "`"$dir\poll.py`"" -WorkingDirectory $dir
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650)
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+Register-ScheduledTask -TaskName 'Vigil Poller' -Action $action -Trigger $trigger -Settings $settings</code></pre>
+<p><strong>What this does:</strong> defines what to run, when to repeat it, and how to behave on battery or if a run is still going, then registers the task.</p>
+<pre><code>Get-ScheduledTaskInfo -TaskName 'Vigil Poller' | Select-Object LastRunTime, LastTaskResult, NextRunTime</code></pre>
+<p><strong>Check:</strong> <code>LastTaskResult</code> is <code>0</code>. While it's running, you may see <code>267009</code>.</p>
+
+<h3>Step 9: Group related alerts</h3>
+<p><strong>Why:</strong> one attack can create many alerts. <code>correlate.py</code> groups them into one scored incident, so the AI and analyst see the whole story. Section 5 lists the rules. It runs automatically inside <code>poll.py</code>.</p>
+<p><strong>Check:</strong> the log shows an <code>incidents</code> count. In this project, 38 detections became 3 incidents.</p>
+
+<h3>Step 10: Improve the AI prompts</h3>
+<p><strong>Why:</strong> better instructions give the model structure. <code>prompts/core.md</code> holds the main rules, and 11 playbooks cover areas such as execution and credential access. <code>build_prompt.py</code> chooses up to 4 by ATT&amp;CK technique. <code>defang.py</code> makes indicators safe, and <code>validate.py</code> rejects invented event IDs.</p>
+<pre><code>python defang.py
+python build_prompt.py path\to\incident.json</code></pre>
+<p><strong>Check:</strong> the first shows masked values like <code>bad[.]com</code>. The second lists playbooks and the prompt size.</p>
+
+<h3>Step 11: Install PostgreSQL</h3>
+<p><strong>Why:</strong> a database stores incidents reliably, and lets the portal search them. The official download returned a 403 error here, and drive C: had little space, so PostgreSQL came from conda-forge and was installed on F:.</p>
+<pre><code>$root = 'F:\PostgreSQL'
+New-Item -ItemType Directory -Force $root | Out-Null
+curl.exe -L -o "$root\micromamba.exe" 'https://github.com/mamba-org/micromamba-releases/releases/latest/download/micromamba-win-64.exe'
+$env:MAMBA_ROOT_PREFIX = "$root\mamba"
+&amp; "$root\micromamba.exe" create -y -p "$root\env" -c conda-forge --override-channels 'postgresql=17'</code></pre>
+<p>Next, create and start the database server. The password goes in a temporary file, which is deleted straight away:</p>
+<pre><code>$bin = "$root\env\Library\bin"
+$pwFile = "$env:TEMP\pg-admin.txt"
+$adminPassword = Read-Host 'Choose a postgres admin password'
+[IO.File]::WriteAllText($pwFile, $adminPassword)
+&amp; "$bin\initdb.exe" -D "$root\data" -U postgres --pwfile=$pwFile -A scram-sha-256 -E UTF8 --locale=C
+Remove-Item -LiteralPath $pwFile
+Add-Content -LiteralPath "$root\data\postgresql.conf" -Value "`nlisten_addresses = 'localhost'`nport = 5432" -Encoding ascii
+&amp; "$bin\pg_ctl.exe" start -D "$root\data" -l "$root\postgres.log"
+&amp; "$bin\pg_isready.exe" -h localhost -p 5432</code></pre>
+<p><strong>Check:</strong> the last command prints <code>accepting connections</code>. <code>listen_addresses</code> keeps the database reachable from this laptop only.</p>
+
+<h3>Step 12: Start PostgreSQL at login</h3>
+<pre><code>$cmd = "&amp; '$bin\pg_ctl.exe' start -D '$root\data' -l '$root\postgres.log'"
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -Command `"$cmd`""
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
+Register-ScheduledTask -TaskName 'Vigil PostgreSQL' -Action $action -Trigger $trigger</code></pre>
+<p><strong>Check:</strong> <code>Get-ScheduledTask -TaskName 'Vigil PostgreSQL'</code> shows the task. A real restart is still the final test.</p>
+
+<h3>Step 13: Create the database and tables</h3>
+<p><strong>Why:</strong> the application uses its own limited login instead of the admin account.</p>
+<pre><code>$bytes = New-Object byte[] 24
+[Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+$dbPassword = [BitConverter]::ToString($bytes).Replace('-', '')
+[Environment]::SetEnvironmentVariable('VIGIL_DB_PASSWORD', $dbPassword, 'User')
+$env:VIGIL_DB_PASSWORD = $dbPassword
+$env:PGPASSWORD = Read-Host 'Enter the postgres admin password'
+"CREATE ROLE vigil LOGIN PASSWORD '$dbPassword';`nCREATE DATABASE vigil OWNER vigil;" | &amp; "$bin\psql.exe" -h localhost -U postgres -d postgres -q -v ON_ERROR_STOP=1
+Remove-Item Env:PGPASSWORD
+pip install -r requirements.txt
+python db.py</code></pre>
+<p><strong>What this does:</strong> creates a random password, saves it, creates the login and database, then builds the tables from <code>schema.sql</code>.</p>
+<p><strong>Check:</strong> the last command prints <code>tables ready</code>. Run <code>python db.py</code> again after updating <code>schema.sql</code>.</p>
+
+<h3>Step 14: Build the web portal</h3>
+<p><strong>Why:</strong> analysts need one place to review incidents. <code>portal.py</code> serves the pages in <code>templates/</code> and <code>static/</code>.</p>
+<p>Set a password of at least 14 characters first. Nothing shows while you type:</p>
+<pre><code>powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\set-portal-password.ps1</code></pre>
+<p>Open a new PowerShell window, then start the portal, and leave the window open:</p>
+<pre><code>cd "F:\Gitrepo\vigil mdr"
+.\.venv\Scripts\python.exe portal.py</code></pre>
+<p><strong>Check:</strong> open <code>http://127.0.0.1:8080</code> and sign in. A bug found here: an early version of the password script added hidden characters, so correct passwords failed. The script now avoids that.</p>
+<div class="note">Times from PostgreSQL first appeared in local time under a UTC label. The connection now forces UTC, because wrong timestamps can mislead an investigation.</div>
+
+<h3>Step 15: Add the analyst tools</h3>
+<p>These run inside the portal, so they need no extra commands:</p>
+<ul>
+  <li><strong>Queue:</strong> sorted by severity, then newest, with filters and a flag for failed AI analysis.</li>
+  <li><strong>Incident page:</strong> verdict card, attack chain, evidence links, indicators and a process tree from <code>process_tree.py</code>.</li>
+  <li><strong>Review:</strong> approve, edit, reject with a required reason, or close. Every decision goes in the audit trail.</li>
+  <li><strong>Customer report:</strong> available only after approval or editing, and leaves out raw events.</li>
+  <li><strong>Dashboard:</strong> charts from <code>charts.py</code>, built on the server with no chart library.</li>
+</ul>
+<p><strong>Check:</strong> open an incident, select an event ID, and confirm it jumps to the evidence.</p>
+
+<h3>Step 16: Publish the portal (optional)</h3>
+<div class="note">Add the login first. A public portal holds real hostnames, usernames, IP addresses and command lines. Skip this step unless you need it.</div>
+<p>Start the portal in public mode:</p>
+<pre><code>$env:VIGIL_PUBLIC = '1'
+.\.venv\Scripts\python.exe portal.py</code></pre>
+<p>Then, in a second window, start the free tunnel:</p>
+<pre><code>cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8080</code></pre>
+<p><strong>Check:</strong> open the <code>trycloudflare.com</code> address it prints. You should reach the login page, and signed-out visitors shouldn't see any incident data.</p>
+<p>The address changes when the tunnel restarts, and the site stops if the laptop sleeps. To go offline at once:</p>
+<pre><code>Stop-Process -Name cloudflared</code></pre>
+
+<h3>Step 17: Save the work to GitHub</h3>
+<p><strong>Why:</strong> Git keeps a history of your code, and GitHub keeps a copy off your laptop. Create <code>.gitignore</code> first, so private data stays out:</p>
+<pre><code>.venv/
+data/
+__pycache__/
+*.pyc</code></pre>
+<p>Then create a private repo and upload the code:</p>
+<pre><code>git init -b main
+git add -A
+git diff --cached --name-only
+git commit -m "Add Vigil MDR detection pipeline"
+gh repo create your-account/vigil-mdr --private --source . --remote origin --push</code></pre>
+<p>For later changes, use:</p>
+<pre><code>git add -A
+git commit -m "Describe your change"
+git push origin main</code></pre>
+<p><strong>Check:</strong> review the list from <code>git diff --cached --name-only</code> before committing. Nothing from <code>data/</code> or <code>.venv/</code> should appear.</p>
+
+<h3>Step 18: Check that everything is healthy</h3>
+<pre><code>Get-ScheduledTask -TaskName 'Vigil Poller'
+Get-ScheduledTaskInfo -TaskName 'Vigil Poller' | Select-Object LastRunTime, LastTaskResult, NextRunTime
+Start-ScheduledTask -TaskName 'Vigil Poller'
+Get-Content data\poll.log -Tail 5
+.\.venv\Scripts\python.exe report.py</code></pre>
+<p><strong>Check:</strong> the task is <code>Ready</code> or <code>Running</code>, the log has a recent <code>fetched</code> line, and the report command prints detection and incident counts.</p>
+
+<h2>13. Glossary</h2>
+<table>
+  <tr><th>Term</th><th>Meaning</th></tr>
+  <tr><td>ATT&amp;CK</td><td>MITRE's public catalog of attacker techniques, such as T1059.001 for PowerShell</td></tr>
+  <tr><td>API key</td><td>A password that lets a program, not a person, use a service</td></tr>
+  <tr><td>Atom</td><td>LimaCharlie's unique ID for a process</td></tr>
+  <tr><td>Correlation</td><td>Grouping related alerts into one incident</td></tr>
+  <tr><td>Defanging</td><td>Changing an indicator, such as <code>bad.com</code> to <code>bad[.]com</code>, so it can't be clicked</td></tr>
+  <tr><td>Detection</td><td>An alert raised when a rule matches an event</td></tr>
+  <tr><td>Environment variable</td><td>A named value stored by Windows that programs can read</td></tr>
+  <tr><td>IOC</td><td>Indicator of compromise, such as a suspicious IP address, domain or file hash</td></tr>
+  <tr><td>LSASS</td><td>The Windows process that handles logins, and a common target for credential theft</td></tr>
+  <tr><td>MDR</td><td>Managed Detection and Response, a service that monitors and investigates threats</td></tr>
+  <tr><td>Ollama</td><td>A tool that runs AI models on your own computer</td></tr>
+  <tr><td>Schema</td><td>A definition of the fields and format that data must follow</td></tr>
+  <tr><td>Sensor</td><td>Software on a machine that reports its activity</td></tr>
+  <tr><td>Sigma</td><td>A shared format for writing detection rules</td></tr>
+  <tr><td>Tunnel</td><td>A secure outbound link that gives a local site a public address</td></tr>
+  <tr><td>Virtual environment</td><td>A private folder of Python packages for one project</td></tr>
+</table>
 </body>
 </html>
