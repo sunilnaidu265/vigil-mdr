@@ -1,8 +1,9 @@
-"""Fetch LimaCharlie detections, group them into incidents, and send those to Ollama.
-Run by a scheduled task."""
+"""Fetch LimaCharlie detections, group them into incidents, send those to Ollama,
+and store the results in PostgreSQL. Run by a scheduled task."""
 import json, logging, os, pathlib, re, sys, time
 from datetime import datetime
 import requests
+import db
 from adapters.limacharlie import _redact
 from analyze import analyze
 from correlate import correlate
@@ -10,7 +11,6 @@ from correlate import correlate
 BASE = pathlib.Path(__file__).parent
 DATA = BASE / "data"
 RAW_DIR = DATA / "detections"
-INCIDENT_DIR = DATA / "incidents"
 STATE_FILE = DATA / "state.json"
 
 API = "https://api.limacharlie.io/v1"
@@ -21,7 +21,6 @@ MAX_PER_RUN = 10                # the rest wait for the next run
 PAGE_SIZE = 100
 
 RAW_DIR.mkdir(parents=True, exist_ok=True)
-INCIDENT_DIR.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(filename=DATA / "poll.log", encoding="utf-8", level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("poll")
@@ -90,14 +89,11 @@ def load_detections():
     return [json.loads(p.read_text(encoding="utf-8")) for p in RAW_DIR.glob("*.json")]
 
 
-def needs_analysis(incident, now):
+def needs_analysis(incident, analyzed, now):
     end = datetime.fromisoformat(incident["end"].replace("Z", "+00:00")).timestamp()
     if now - end < HOLD:
         return False
-    path = INCIDENT_DIR / safe_name(incident["incident_id"])
-    if not path.exists():
-        return True
-    return json.loads(path.read_text(encoding="utf-8")).get("detect_ids") != incident["detect_ids"]
+    return analyzed.get(incident["incident_id"]) != incident["detect_ids"]
 
 
 def process(incident):
@@ -108,18 +104,10 @@ def process(incident):
     except Exception as e:  # bad model output must not block every later incident
         record = {"incident_id": incident["incident_id"], "host": incident["host"], "score": incident["score"],
                   "ai_status": "failed", "errors": [str(e)]}
-    record.update({k: incident[k] for k in ("detect_ids", "start", "end", "linked_by", "context")})
-    (INCIDENT_DIR / safe_name(incident["incident_id"])).write_text(json.dumps(record, indent=2), encoding="utf-8")
+    record["detect_ids"] = incident["detect_ids"]
+    db.save_analysis(record)
     log.info("analyzed %s score=%s detections=%d -> %s %s", incident["incident_id"], incident["score"],
              len(incident["detect_ids"]), record.get("ai_status"), record.get("analysis", {}).get("verdict", ""))
-
-
-def remove_stale(incidents):
-    # regrouping can replace an incident, so its old result must go
-    current = {safe_name(i["incident_id"]) for i in incidents}
-    for path in INCIDENT_DIR.glob("*.json"):
-        if path.name not in current:
-            path.unlink()
 
 
 def main():
@@ -130,9 +118,11 @@ def main():
     state["last_checked"] = now  # raw files are saved, so analysis can resume from them
     save_state(state)
 
-    incidents = correlate(load_detections())
-    remove_stale(incidents)
-    pending = [i for i in incidents if needs_analysis(i, now)]
+    detections = load_detections()
+    incidents = correlate(detections)
+    db.sync(incidents, detections)
+    analyzed = db.analyzed_detection_sets()
+    pending = [i for i in incidents if needs_analysis(i, analyzed, now)]
     log.info("fetched %d, new %d, incidents %d, to analyze %d", len(fetched), saved, len(incidents), len(pending))
 
     for incident in pending[:MAX_PER_RUN]:  # highest score first

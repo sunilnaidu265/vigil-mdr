@@ -11,6 +11,7 @@ Vigil only assists a human reviewer. It doesn't block attacks, and its verdicts 
 - Windows with PowerShell
 - Python 3
 - [Ollama](https://ollama.com) with the `qwen3:4b` model
+- PostgreSQL 17 with a `vigil` database and login
 - A LimaCharlie organization with Insight enabled
 - A LimaCharlie API key with only the `insight.det.get` permission
 
@@ -36,12 +37,14 @@ Vigil only assists a human reviewer. It doesn't block attacks, and its verdicts 
    ```powershell
    [Environment]::SetEnvironmentVariable("LC_OID", "your-org-id", "User")
    [Environment]::SetEnvironmentVariable("LC_API_KEY", "your-api-key", "User")
+   [Environment]::SetEnvironmentVariable("VIGIL_DB_PASSWORD", "your-db-password", "User")
    ```
 
-4. Close PowerShell and open it again in this folder, then test once:
+4. Close PowerShell and open it again in this folder. Create the database tables, then test once:
 
    ```powershell
    .\.venv\Scripts\Activate.ps1
+   python db.py
    python poll.py
    Get-Content data\poll.log -Tail 10
    ```
@@ -60,7 +63,9 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatt
 Register-ScheduledTask -TaskName 'Vigil Poller' -Action $action -Trigger $trigger -Settings $settings
 ```
 
-It runs only while you're logged in, and Ollama must be running.
+It runs only while you're logged in, and Ollama and PostgreSQL must be running.
+
+On this laptop, PostgreSQL 17 is installed in `F:\PostgreSQL`, accepts connections from this machine only, and starts at login through the "Vigil PostgreSQL" scheduled task.
 
 ## Daily use
 
@@ -68,7 +73,7 @@ There's nothing to start. Check results whenever you like:
 
 | To see | Open |
 |---|---|
-| Incidents and verdicts | `data\incidents\` |
+| Incidents and verdicts | PostgreSQL `vigil` database, or a generated report |
 | What the job has been doing | `data\poll.log` |
 | Raw detections, with passwords hidden | `data\detections\` |
 
@@ -79,6 +84,21 @@ To build a full report with indicators and a timeline, run:
 ```
 
 It's saved in `data\reports\`. Open the newest `.html` file in a browser.
+
+To see incidents directly in the database, run:
+
+```powershell
+$env:PGPASSWORD = [Environment]::GetEnvironmentVariable('VIGIL_DB_PASSWORD','User')
+F:\PostgreSQL\env\Library\bin\psql.exe -h localhost -U vigil -d vigil -c "SELECT i.incident_id, i.score, a.verdict, a.confidence FROM incidents i LEFT JOIN analyses a USING (incident_id) ORDER BY i.score DESC, a.created_at DESC"
+Remove-Item Env:PGPASSWORD
+```
+
+| Table | Holds |
+|---|---|
+| `incidents` | One row per incident, with score and grouping details |
+| `detections` | Each LimaCharlie detection, masked, linked to its incident |
+| `events` | Process events used as evidence |
+| `analyses` | Ollama's verdicts, including older ones when an incident is re-analyzed |
 
 ## Control the job
 
@@ -129,13 +149,14 @@ Trust the raw events over the AI summary, because the model can be wrong. Accura
 | `run failed` in `poll.log` | Read the error below it. |
 | 401 or 403 error | Check `LC_OID`, `LC_API_KEY` and the key's permission. |
 | Connection error to `localhost:11434` | Start Ollama. |
+| Connection error to `localhost:5432` | Run `Start-ScheduledTask -TaskName 'Vigil PostgreSQL'`. |
 | Nothing new appears | LimaCharlie may have no new detections. Check `fetched` in `poll.log`. |
 | Incident `ai_status` is `failed` | Ollama's answer failed validation. The details are in `errors`. |
 | Job doesn't run | Check you're logged in and the task isn't disabled. |
 
 ## Keep data private
 
-- `data/` and `.venv/` are ignored by Git. Keep it that way, because detections hold hostnames, usernames, IPs and command lines.
+- `data/` and `.venv/` are ignored by Git. Keep it that way, because detections hold hostnames, usernames, IPs and command lines. The database holds the same details and lives outside the repo.
 - Masking only covers common argument names, so check reports before sharing them.
 - If you leak an API key, delete it in LimaCharlie and create a new one.
 

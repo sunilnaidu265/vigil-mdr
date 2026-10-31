@@ -12,7 +12,7 @@ automatically by `tools/daily-status.ps1`.
 | 3 | Detect | ATT&CK-tagged rules fire on Atomic Red Team tests | Working, needs tuning | | |
 | 4 | Correlate | Related detections become one scored incident | Working, needs tuning | 2026-10-31 | |
 | 5 | AI Analyze | Local Ollama triage with validated JSON | Running, accuracy not measured | 2026-10-31 | |
-| 6 | Case store | Incidents saved in PostgreSQL | Not started | | |
+| 6 | Case store | Incidents saved in PostgreSQL | Done | 2026-10-31 | 2026-10-31 |
 | 7 | Portal | FastAPI + HTMX with approve/reject | Not started | | |
 
 ## Remaining work
@@ -32,8 +32,10 @@ Work through these in order. Data comes only from LimaCharlie, with no sandbox s
 - [ ] Tune noisy detection rules and keep the rules in Git.
 
 ### Build the rest of the diagram
-- [ ] Stage 6: create PostgreSQL tables for events, detections, incidents and analyses.
-- [ ] Stage 6: save incidents to PostgreSQL instead of files.
+- [x] Stage 6: create PostgreSQL tables for events, detections, incidents and analyses.
+- [x] Stage 6: save incidents to PostgreSQL instead of files.
+- [ ] Stage 6: confirm PostgreSQL starts by itself after a restart.
+- [ ] Stage 6: set up regular database backups.
 - [ ] Stage 7: build the FastAPI and HTMX dashboard and incident pages.
 - [ ] Stage 7: add HTML and PDF reports to the portal.
 - [ ] Analyst review: add approve, reject and close.

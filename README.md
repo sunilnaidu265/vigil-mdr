@@ -14,6 +14,7 @@ It's a learning project, not a production security service. It doesn't block att
 - Scores incidents using rule severity, ATT&CK techniques and access to LSASS.
 - Sends each incident to a local Ollama model, so detection data stays on the laptop.
 - Validates the model's JSON and rejects evidence IDs it makes up.
+- Stores incidents, detections, events and verdicts in PostgreSQL.
 - Builds an HTML report with indicators, command lines, hashes and a timeline.
 
 ## Project status
@@ -25,7 +26,7 @@ It's a learning project, not a production security service. It doesn't block att
 | 3. Detect | Working, needs tuning |
 | 4. Correlate | Working, needs tuning |
 | 5. AI Analyze | Running, accuracy not measured |
-| 6. Case Store | Planned |
+| 6. Case Store | Done |
 | 7. Web Portal | Planned |
 | Analyst review and feedback loop | Planned |
 
@@ -36,7 +37,8 @@ The detailed task list is in [SPRINT_STATUS.md](SPRINT_STATUS.md).
 - **Detection:** LimaCharlie, with Sigma and managed rules
 - **Pipeline:** Python and Windows Task Scheduler
 - **AI:** Ollama with the `qwen3:4b` model
-- **Planned:** PostgreSQL, FastAPI and HTMX
+- **Storage:** PostgreSQL 17
+- **Planned:** FastAPI and HTMX
 
 ## Project layout
 
@@ -46,6 +48,8 @@ The detailed task list is in [SPRINT_STATUS.md](SPRINT_STATUS.md).
 | `correlate.py` | Groups detections and scores incidents |
 | `analyze.py` | Sends incidents to Ollama |
 | `validate.py` | Checks the model's answers |
+| `db.py` | Reads and writes PostgreSQL |
+| `schema.sql` | Database tables |
 | `report.py` | Builds the HTML report |
 | `adapters/` | Converts LimaCharlie detections into a simple format |
 | `prompts/` | Instructions for the AI model |
@@ -59,4 +63,4 @@ Setup, daily use, settings and troubleshooting are all in [instructions.md](inst
 
 ## Data and secrets
 
-Detection data stays in `data/`, which Git ignores. LimaCharlie credentials are stored in Windows user environment variables and never in the code.
+Detection data stays in `data/`, which Git ignores, and in a local PostgreSQL database that accepts connections from the laptop only. LimaCharlie and database credentials are stored in Windows user environment variables and never in the code.

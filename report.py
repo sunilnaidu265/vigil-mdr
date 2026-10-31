@@ -1,12 +1,12 @@
 """Build a detailed HTML report from saved detections and verdicts in data/."""
 import collections, html, json, pathlib, re
 from datetime import datetime
+import db
 from adapters import adapt_limacharlie
 from adapters.limacharlie import _normalize_time
 
 BASE = pathlib.Path(__file__).parent
 RAW_DIR = BASE / "data" / "detections"
-INCIDENT_DIR = BASE / "data" / "incidents"
 REPORT_DIR = BASE / "data" / "reports"
 
 URL = re.compile(r"https?://[^\s\"'<>)]+", re.IGNORECASE)
@@ -41,11 +41,6 @@ def walk_dicts(value):
     elif isinstance(value, list):
         for item in value:
             yield from walk_dicts(item)
-
-
-def load_incidents():
-    records = [json.loads(p.read_text(encoding="utf-8")) for p in INCIDENT_DIR.glob("*.json")]
-    return sorted(records, key=lambda r: -r.get("score", 0))
 
 
 def load_cases(incidents):
@@ -185,7 +180,7 @@ def build(cases, incidents):
 
 if __name__ == "__main__":
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    incidents = load_incidents()
+    incidents = db.load_incidents()
     cases = load_cases(incidents)
     path = REPORT_DIR / f"vigil-report-{datetime.now():%Y%m%d-%H%M}.html"
     path.write_text(build(cases, incidents), encoding="utf-8")
